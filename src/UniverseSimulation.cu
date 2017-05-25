@@ -128,7 +128,7 @@ void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, in
 
 	for (int i = 0; i < epochs; i++) {
 		simulateNaive<<<blocks, threads, sizeof(float4) * partitions>>>(dBodies, dDynamics, numberOfParticles, dt, epochs);
-		cudaMemcpy(bodies, dBodies, cudaMemcpyDeviceToHost); //copu back to save to binary file
+		cudaMemcpy(bodies, dBodies, cudaMemcpyDeviceToHost); //copy back to save to binary file
 		cudaMemcpy(dyanmics, dDynamics, cudaMemcpyDeviceToHost);
 		cudaMemcpy(generationRanges, dGenerationRanges, cudaMemcpyDeviceToHost);
 		cudaMemcpy(accelerations, dAccelerations, Ranges, cudaMemcpyDeviceToHost);

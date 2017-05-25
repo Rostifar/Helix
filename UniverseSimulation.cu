@@ -55,11 +55,11 @@ __device__ void updateBodyPosition(float3 velocity, float4 *r, float dt) {
 	r->z += acceleration.z * dt;
 }
 
-__global__ void simulateNaive(float4 *bodies, float4 *dynamics, int n_particles, float _dt, int epochs) {
+__global__ void simulateNaive(float4 *bodies, float4 *dynamics, int n_particles) {
 	const int MAX_THREAD_COUNT = 1024;
+	const float dt = 0.00001;
 	int particleId = blockDim.x * blockIdx.x + threadIdx.x;
 	int nParticles = n_particles;
-	float dt = _dt;
 	float4 body = bodies[particleId];
 	float4 dynamic = dynamics[particleId];
 	float3 velocity(dynamic.x, dynamic.y, dynamic.z);
@@ -67,22 +67,26 @@ __global__ void simulateNaive(float4 *bodies, float4 *dynamics, int n_particles,
 	float3 acceleration(0.0f, 0.0f, 0.0f);
 	extern __shared__ float4 interactingBodies[];
 
-	for (int j = 0; j < epochs; j++) {
-		float3 vHalf = updateBodyVelocity(acceleration, velocity, dt, true);
-		body.x += vHalf.x * dt;
-		body.y += vHalf.y * dt;
-		body.z += vHalf.z * dt;
-		for (int i = 0; i < n_particles; i += blockDim.x) {
-			interactingBodies[threadIdx.x] = bodies[threadIdx.x + i];
-			__syncthreads();
-			calculatePartitionAcceleration(&acceleration);
-			__syncthreads();
-		}
-		acceleration.x *= G;
-		acceleration.y *= G;
-		acceleration.z *= G;
-		velocity = updateBodyVelocity(acceleration, vHalf, dt);
+	float3 vHalf = updateBodyVelocity(acceleration, velocity, dt, true);
+	body.x += vHalf.x * dt;
+	body.y += vHalf.y * dt;
+	body.z += vHalf.z * dt;
+	for (int i = 0; i < n_particles; i += blockDim.x) {
+		interactingBodies[threadIdx.x] = bodies[threadIdx.x + i];
+		__syncthreads();
+		calculatePartitionAcceleration(&acceleration);
+		__syncthreads();
 	}
+	acceleration.x *= G;
+	acceleration.y *= G;
+	acceleration.z *= G;
+	velocity = updateBodyVelocity(acceleration, vHalf, dt);
+	dynamic.x = velocity.x;
+	dynamic.y = velocity.y;
+	dynamic.z = velocity.z;
+
+	bodies[particleId] = body;
+	dynamics[particleId] = dynamic;
 }
 
 __global__ void generateParticles(float4 *bodies, float4 *dynamics, float4 *ranges) {
@@ -91,30 +95,44 @@ __global__ void generateParticles(float4 *bodies, float4 *dynamics, float4 *rang
 	float4 dynamic = dynamics[idx];
 	float4 range = ranges[idx];
 	float4 range2 = ranges[idx];
+
+
+
 }
 
 void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, int epochs) { //add ability to serialize from past renders.
 	size_t allocationSize = sizeof(float4) * numberOfParticles;
-	const size_t rangeAllcSize = sizeof(float4) * numberOfParticles * 2;
+	size_t rangeAllcSize = sizeof(float4) * numberOfParticles * 2;
 	float4 *bodies = malloc(allocationSize);
 	float4 *dynamics = malloc(allocationSize);
 	float4 *generationRanges = malloc(rangeAllcSize); //[pos_l, pos_h, vel_l, vel_h]; [mass, etc, etc, etc]
+	float3 *accelerations = malloc(allocationSize);
 	float4 *dBodies;
 	float4 *dDynamics;
 	float4 *dGenerationRanges;
+	float4 *dAccelerations;
 	dim3 blocks(numberOfParticles / partitions, 0, 0);
 	dim3 threads(partitions, 0, 0);
 
 	cudaMalloc((void**) &dBodies, allocationSize);
 	cudaMalloc((void**) &dDynamics, allocationSize);
 	cudaMalloc((void**) &dGenerationRanges, rangeAllcSize);
+	cudaMalloc((void**) &dAccelerations, allocationSize);
 
 	cudaMemcpy(dBodies, bodies, cudaMemcpyHostToDevice);
 	cudaMemcpy(dDynamics, dynamics, cudaMemcpyHostToDevice);
 	cudaMemcpy(dGenerationRanges, generationRanges, cudaMemcpyHostToDevice);
+	cudaMemcpy(dAccelerations, accelerations, cudaMemcpyHostToDevice);
 
 	generateParticles<<<blocks, threads>>>(dBodies, dDynamics, dGenerationRanges);
-	simulateNaive<<<blocks, threads, sizeof(float4) * partitions>>>(dBodies, dDynamics, numberOfParticles, dt, epochs);
+
+	for (int i = 0; i < epochs; i++) {
+		simulateNaive<<<blocks, threads, sizeof(float4) * partitions>>>(dBodies, dDynamics, numberOfParticles, dt, epochs);
+		cudaMemcpy(bodies, dBodies, cudaMemcpyDeviceToHost); //copu back to save to binary file
+		cudaMemcpy(dyanmics, dDynamics, cudaMemcpyDeviceToHost);
+		cudaMemcpy(generationRanges, dGenerationRanges, cudaMemcpyDeviceToHost);
+		cudaMemcpy(accelerations, dAccelerations, Ranges, cudaMemcpyDeviceToHost);
+	}
 }
 
 void resumeUniverseSimulation() {

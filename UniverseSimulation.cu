@@ -8,10 +8,6 @@ __device__ float globalDt;
 
 const int MAX_THREAD_SIZE = 1024;
 
-__global__ void generateParticles(float4 particle) {
-
-}
-
 __device__ int getGlobalId() {
 	return blockIdx.x * blockDim.y * blockDim.x + threadIdx.y * blockDim.x + threadIdx.x;
 }
@@ -59,7 +55,7 @@ __device__ void updateBodyPosition(float3 velocity, float4 *r, float dt) {
 	r->z += acceleration.z * dt;
 }
 
-__global__ void simulateNaive(float4 *bodies, float3 *dynamics, int n_particles, float _dt, int epochs) {
+__global__ void simulateNaive(float4 *bodies, float4 *dynamics, int n_particles, float _dt, int epochs) {
 	const int MAX_THREAD_COUNT = 1024;
 	int particleId = blockDim.x * blockIdx.x + threadIdx.x;
 	int nParticles = n_particles;
@@ -89,20 +85,36 @@ __global__ void simulateNaive(float4 *bodies, float3 *dynamics, int n_particles,
 	}
 }
 
+__global__ void generateParticles(float4 *bodies, float4 *dynamics, float4 *ranges) {
+	int idx = blockDim.x * blockIdx.x + threadIdx.x;
+	float4 body = bodies[idx];
+	float4 dynamic = dynamics[idx];
+	float4 range = ranges[idx];
+	float4 range2 = ranges[idx];
+}
+
 void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, int epochs) { //add ability to serialize from past renders.
 	size_t allocationSize = sizeof(float4) * numberOfParticles;
+	const size_t rangeAllcSize = sizeof(float4) * numberOfParticles * 2;
 	float4 *bodies = malloc(allocationSize);
 	float4 *dynamics = malloc(allocationSize);
+	float4 *generationRanges = malloc(rangeAllcSize); //[pos_l, pos_h, vel_l, vel_h]; [mass, etc, etc, etc]
 	float4 *dBodies;
 	float4 *dDynamics;
+	float4 *dGenerationRanges;
 	dim3 blocks(numberOfParticles / partitions, 0, 0);
 	dim3 threads(partitions, 0, 0);
 
 	cudaMalloc((void**) &dBodies, allocationSize);
 	cudaMalloc((void**) &dDynamics, allocationSize);
+	cudaMalloc((void**) &dGenerationRanges, rangeAllcSize);
+
 	cudaMemcpy(dBodies, bodies, cudaMemcpyHostToDevice);
 	cudaMemcpy(dDynamics, dynamics, cudaMemcpyHostToDevice);
-	simulateNaive<<<blocks, threads, sizeof(float4) * partitions>>>(d_particles, dDynamics, numberOfParticles, dt, epochs);
+	cudaMemcpy(dGenerationRanges, generationRanges, cudaMemcpyHostToDevice);
+
+	generateParticles<<<blocks, threads>>>(dBodies, dDynamics, dGenerationRanges);
+	simulateNaive<<<blocks, threads, sizeof(float4) * partitions>>>(dBodies, dDynamics, numberOfParticles, dt, epochs);
 }
 
 void resumeUniverseSimulation() {

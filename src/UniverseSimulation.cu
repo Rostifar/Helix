@@ -97,7 +97,6 @@ __global__ void generateParticles(float4 *bodies, float4 *dynamics, float4 *rang
 	float4 range2 = ranges[idx];
 
 
-
 }
 
 void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, int epochs) { //add ability to serialize from past renders.
@@ -123,7 +122,6 @@ void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, in
 	cudaMemcpy(dDynamics, dynamics, cudaMemcpyHostToDevice);
 	cudaMemcpy(dGenerationRanges, generationRanges, cudaMemcpyHostToDevice);
 	cudaMemcpy(dAccelerations, accelerations, cudaMemcpyHostToDevice);
-
 	generateParticles<<<blocks, threads>>>(dBodies, dDynamics, dGenerationRanges);
 
 	for (int i = 0; i < epochs; i++) {

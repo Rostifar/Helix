@@ -1,6 +1,7 @@
 #include <iostream>
 #include <numeric>
 #include <math.h>
+#ic
 
 __constant__ float epsilonSquared = 0.2;
 __constant__ float G = 6.67300E-11;
@@ -113,6 +114,8 @@ void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, in
 	dim3 blocks(numberOfParticles / partitions, 0, 0);
 	dim3 threads(partitions, 0, 0);
 
+	curandState *dState;
+
 	cudaMalloc((void**) &dBodies, allocationSize);
 	cudaMalloc((void**) &dDynamics, allocationSize);
 	cudaMalloc((void**) &dGenerationRanges, rangeAllcSize);
@@ -129,7 +132,7 @@ void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, in
 		cudaMemcpy(bodies, dBodies, cudaMemcpyDeviceToHost); //copy back to save to binary file
 		cudaMemcpy(dyanmics, dDynamics, cudaMemcpyDeviceToHost);
 		cudaMemcpy(generationRanges, dGenerationRanges, cudaMemcpyDeviceToHost);
-		cudaMemcpy(accelerations, dAccelerations, Ranges, cudaMemcpyDeviceToHost);
+		cudaMemcpy(accelerations, dAccelerations, Ranges, cudaMemcpyDeviceToHost); //yo lance sucks
 	}
 }
 

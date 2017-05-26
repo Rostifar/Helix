@@ -1,7 +1,8 @@
 #include <iostream>
 #include <numeric>
 #include <math.h>
-#ic
+#include "cuda.h"
+#include "cuda_runtime.h"
 
 __constant__ float epsilonSquared = 0.2;
 __constant__ float G = 6.67300E-11;

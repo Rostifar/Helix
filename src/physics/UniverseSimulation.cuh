@@ -8,16 +8,16 @@
 #ifndef UNIVERSESIMULATION_CUH_
 #define UNIVERSESIMULATION_CUH_
 
-typedef struct UniverseSimSpec {
+template <typename F>
+struct UniverseSimSpec {
 	int particles;
 	int partitions;
 	int epochs;
+	F dt;
+	F epsilon;
 };
 
-template<class F, class F3, class F4>
-void beginSimulation(UniverseSimSpec *specs, F _dt, F _epsilon);
-
-template<class F, class F3, class F4>
-void resumeSimulation();
+template<typename F, class F3, class F4>
+void beginSimulation(UniverseSimSpec<F> *specs, F _dt, F _epsilon, F4 *_ranges);
 
 #endif /* UNIVERSESIMULATION_CUH_ */

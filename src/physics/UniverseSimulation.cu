@@ -6,12 +6,13 @@
 #include <curand_kernel.h>
 #include "cuda_runtime.h"
 #include "UniverseSimulation.cuh"
+#include <stdio.h>
+#include "../CudaUtilities.cuh"
 
 __constant__ float G = 6.67300E-11;
-const int MAX_THREAD_SIZE = 1024;
 
-template<class F3>
-__device__ void calculatePartitionAcceleration(F3 *acceleration) {
+template<typename F3, typename F4>
+__device__ void calculatePartitionAcceleration(F4 body, F3 *acceleration) {
 	for (int q = 0; q < blockDim.x; q++) {
 		F3 tempA = calculateBodyAcceleration(body, interactingBodies[q]);
 		acceleration->x += tempA.x;
@@ -20,7 +21,7 @@ __device__ void calculatePartitionAcceleration(F3 *acceleration) {
 	}
 }
 
-template<class F, class F3, class F4>
+template<typename F, typename F3, typename F4>
 __device__ F3 calculateBodyAcceleration(F4 bi, F4 bj) {
 	F3 rij(bi.x - bj.x, bi.y - bj.y, bi.z - bj.z);
 	F3 partialAcc (rij.x * bj.w, rij.y * bj.w, rij.z * bj.z);
@@ -33,7 +34,7 @@ __device__ F3 calculateBodyAcceleration(F4 bi, F4 bj) {
 	return partialAcc;
 }
 
-template<class F, class F3, class F4>
+template<typename F, typename F3, typename F4>
 __device__ float3 updateBodyVelocity(F3 a, F4 v, F dt) { //velocity verlet
 	float3 newV;
 	newV.x = v.x + 0.5 * a.x * dt;
@@ -42,15 +43,15 @@ __device__ float3 updateBodyVelocity(F3 a, F4 v, F dt) { //velocity verlet
 	return newV;
 }
 
-template<class F, class F3, class F4>
+template<typename F, typename F3, typename F4>
 __device__ void updateBodyPosition(F3 velocity, F4 *r, float dt) {
 	r->x += acceleration.x * dt;
 	r->y += acceleration.y * dt;
 	r->z += acceleration.z * dt;
 }
 
-template<class F, class F3, class F4>
-__global__ void simulateNaive(F4 *bodies, F4 *dynamics, F _dt, int n_particles) {
+template<typename F, typename F3, typename F4>
+__global__ void simulateNaive(F4 *bodies, F4 *dynamics, F _dt, F _epsilon, int n_particles) {
 	const int MAX_THREAD_COUNT = 1024;
 	F dt = _dt;
 	int particleId = blockDim.x * blockIdx.x + threadIdx.x;
@@ -80,11 +81,17 @@ __global__ void simulateNaive(F4 *bodies, F4 *dynamics, F _dt, int n_particles) 
 	dynamic.y = velocity.y;
 	dynamic.z = velocity.z;
 
+	printf("Particle: %i \n", particleId);
+	printf("Acceleration: %f %f %f \n", acceleration.x, acceleration.y, acceleration.z);
+	printf("Velocity: %f %f %f \n", velocity.x, velocity.y, velocity.z);
+	printf("Position: %f %f %f \n", body.x, body.y, body.z);
+	printf("\n");
+
 	bodies[particleId] = body;
 	dynamics[particleId] = dynamic;
 }
 
-template<class F4>
+template<typename F4>
 __global__ void generateParticles(curandState *_state, float4 *bodies, float4 *dynamics, float4 *ranges) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
 	F4 body = bodies[idx];
@@ -103,45 +110,36 @@ __global__ void generateParticles(curandState *_state, float4 *bodies, float4 *d
 }
 
 template<class F, class F3, class F4>
-void beginSimulation(int numberOfParticles, int partitions, int epochs, F _dt, F _epsilon) { //add ability to serialize from past renders.
-	size_t allocationSize = sizeof(F4) * numberOfParticles;
-	size_t rangeAllcSize = sizeof(F4) * numberOfParticles * 2;
-	F dt = _dt;
-	F epsilon = _epsilon;
-	F3 *bodies = malloc(allocationSize);
-	F4 *dynamics = malloc(allocationSize);
-	F4 *generationRanges = malloc(rangeAllcSize); //[pos_h, pos_l, vel_h, vel_l]; [mass_h, mass_l, etc, etc]
-	F3 *accelerations = malloc(allocationSize);
-	F4 *dBodies;
-	F4 *dDynamics;
-	F4 *dGenerationRanges;
-	F4 *dAccelerations;
-	dim3 blocks(numberOfParticles / partitions, 0, 0);
-	dim3 threads(partitions, 0, 0);
-	curandState *dState;
+void beginSimulation(UniverseSimSpec<F> *spec, F4 *ranges) {
+	size_t allocationSize = sizeof(F4) * spec->particles;
+	F dt = spec->dt;
+	F epsilon = spec->epsilon;
+	F4 *bodies = (F4 *)malloc(allocationSize);
+	F4 *dynamics = (F4 *)malloc(allocationSize);
+	F4 *states = (F4 *)malloc(allocationSize);
+	F3 *accelerations = (F3 *)malloc(allocationSize);
+	F4 *generationRanges = (F4 *)malloc(allocationSize * 2); //[pos_h, pos_l, vel_h, vel_l]; [mass_h, mass_l, etc, etc]
+	F4 *dBodies, *dDynamics, *dGenerationRanges;
+	F3 *dAccelerations;
+	dim3 blocks(spec->particles / spec->partitions, 0, 0);
+	dim3 threads(spec->partitions, 0, 0);
+	curandState *dStates;
 
-	cudaMalloc(&dState, blocks.x * threads.x);
-	cudaMalloc((void**) &dBodies, allocationSize);
-	cudaMalloc((void**) &dDynamics, allocationSize);
-	cudaMalloc((void**) &dGenerationRanges, rangeAllcSize);
-	cudaMalloc((void**) &dAccelerations, allocationSize);
+	cudaMalloc(&dStates, allocationSize);
+	cudaMemcpy(dStates, states, allocationSize, cudaMemcpyHostToDevice);
+	cudaAlloCopy<F4>(bodies, dBodies, allocationSize);
+	cudaAlloCopy<F4>(dynamics, dDynamics, allocationSize);
+	cudaAlloCopy<F4>(ranges, dBodies, allocationSize * 2);
+	cudaAlloCopy<F3>(accelerations, dAccelerations, allocationSize);
+	generateParticles<F4><<<blocks, threads>>>(dStates, dBodies, dDynamics, dGenerationRanges);
 
-	cudaMemcpy(dBodies, bodies, cudaMemcpyHostToDevice);
-	cudaMemcpy(dDynamics, dynamics, cudaMemcpyHostToDevice);
-	cudaMemcpy(dGenerationRanges, generationRanges, cudaMemcpyHostToDevice);
-	cudaMemcpy(dAccelerations, accelerations, cudaMemcpyHostToDevice);
-	generateParticles<<<blocks, threads>>>(dBodies, dDynamics, dGenerationRanges);
-
-	for (int i = 0; i < epochs; i++) {
-		simulateNaive<<<blocks, threads, sizeof(F4) * partitions>>>(dBodies, dDynamics, numberOfParticles, dt, epochs);
+	for (int i = 0; i < spec->epochs; i++) {
+		simulateNaive<F, F3, F4><<<blocks, threads, sizeof(F4) * spec->partitions>>>(dBodies, dDynamics, dt, epsilon, spec->particles);
 		cudaMemcpy(bodies, dBodies, cudaMemcpyDeviceToHost); //copy back to save to binary file
-		cudaMemcpy(dyanmics, dDynamics, cudaMemcpyDeviceToHost);
+		cudaMemcpy(dynamics, dDynamics, cudaMemcpyDeviceToHost);
 		cudaMemcpy(generationRanges, dGenerationRanges, cudaMemcpyDeviceToHost);
-		cudaMemcpy(accelerations, dAccelerations, Ranges, cudaMemcpyDeviceToHost); //yo lance sucks
+		cudaMemcpy(accelerations, dAccelerations, cudaMemcpyDeviceToHost); //yo lance sucks
 	}
 }
-
-template<class F, class F3, class F4>
-void resumeSimulation() {
-
-}
+template void beginSimulation <float, float3, float4>(UniverseSimSpec<float> *, float4 *);
+template void beginSimulation <double, double3, double4>(UniverseSimSpec<double> *, double4 *);

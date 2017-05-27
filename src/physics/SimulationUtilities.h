@@ -8,15 +8,12 @@
 #ifndef SIMULATIONUTILITIES_H_
 #define SIMULATIONUTILITIES_H_
 #include <string>
+#include <memory>
 
-typedef enum SIMULATION_ERROR {
-	NOT_PEFECT_SQUARE,
-	MAX_THREAD_COUNT,
-	SUCCESS
+typedef struct UniverseSimSpec {
+	int nParticles;
+	int partitions;
+	int epochs;
+	float4 *ranges;
 };
-
-void handleErrors(SIMULATION_ERROR e);
-void static serializeSimulation(std::string file, float4 *bodies, float4 *dynamics, float3 *accelerations);
-void static deserializeSimulation(std::string file,  float4 *bodies, float4 *dynamics, float3 *accelerations);
-
 #endif /* SIMULATIONUTILITIES_H_ */

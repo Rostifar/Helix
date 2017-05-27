@@ -1,7 +1,9 @@
 #include <iostream>
 #include <numeric>
 #include <math.h>
-#include "cuda.h"
+#include <cuda.h>
+#include <curand.h>
+#include <curand_kernel.h>
 #include "cuda_runtime.h"
 
 __constant__ float epsilonSquared = 0.2;
@@ -91,22 +93,30 @@ __global__ void simulateNaive(float4 *bodies, float4 *dynamics, int n_particles)
 	dynamics[particleId] = dynamic;
 }
 
-__global__ void generateParticles(float4 *bodies, float4 *dynamics, float4 *ranges) {
+__global__ void generateParticles(curandState *_state, float4 *bodies, float4 *dynamics, float4 *ranges) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
 	float4 body = bodies[idx];
 	float4 dynamic = dynamics[idx];
 	float4 range = ranges[idx];
-	float4 range2 = ranges[idx];
+	float4 range2 = ranges[idx + 1];
+	curandState state = _state[idx];
 
-
+	body.x = (curand_uniform(&state) * (range.x - range.y + 0.999999)) + range.y;
+	body.y = (curand_uniform(&state) * (range.x - range.y + 0.999999)) + range.y;
+	body.z = (curand_uniform(&state) * (range.x - range.y + 0.999999)) + range.y;
+	dynamic.x = (curand_uniform(&state) * (range.z - range.w + 0.999999)) + range.w;
+	dynamic.y = (curand_uniform(&state) * (range.z - range.w + 0.999999)) + range.w;
+	dynamic.z = (curand_uniform(&state) * (range.z - range.w + 0.999999)) + range.w;
+	body.w = (curand_uniform(&state) * (range2.x - range2.y + 0.999999)) + range2.y;
 }
 
-void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, int epochs) { //add ability to serialize from past renders.
+void beginUniverseSimulation(int numberOfParticles, int partitions, int epochs) { //add ability to serialize from past renders.
 	size_t allocationSize = sizeof(float4) * numberOfParticles;
 	size_t rangeAllcSize = sizeof(float4) * numberOfParticles * 2;
+	float dt = 0.01;
 	float4 *bodies = malloc(allocationSize);
 	float4 *dynamics = malloc(allocationSize);
-	float4 *generationRanges = malloc(rangeAllcSize); //[pos_l, pos_h, vel_l, vel_h]; [mass, etc, etc, etc]
+	float4 *generationRanges = malloc(rangeAllcSize); //[pos_h, pos_l, vel_h, vel_l]; [mass_h, mass_l, etc, etc]
 	float3 *accelerations = malloc(allocationSize);
 	float4 *dBodies;
 	float4 *dDynamics;
@@ -114,9 +124,9 @@ void beginUniverseSimulation(int numberOfParticles, int partitions, float dt, in
 	float4 *dAccelerations;
 	dim3 blocks(numberOfParticles / partitions, 0, 0);
 	dim3 threads(partitions, 0, 0);
-
 	curandState *dState;
 
+	cudaMalloc(&dState, blocks.x * threads.x);
 	cudaMalloc((void**) &dBodies, allocationSize);
 	cudaMalloc((void**) &dDynamics, allocationSize);
 	cudaMalloc((void**) &dGenerationRanges, rangeAllcSize);

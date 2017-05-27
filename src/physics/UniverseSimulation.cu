@@ -5,38 +5,26 @@
 #include <curand.h>
 #include <curand_kernel.h>
 #include "cuda_runtime.h"
+#include "UniverseSimulation.cuh"
 
-__constant__ float epsilonSquared = 0.2;
 __constant__ float G = 6.67300E-11;
-__device__ float globalDt;
-
 const int MAX_THREAD_SIZE = 1024;
 
-__device__ int getGlobalId() {
-	return blockIdx.x * blockDim.y * blockDim.x + threadIdx.y * blockDim.x + threadIdx.x;
-}
-
-__device__ int getParticleId() {
-	return blockIdx.x * blockDim.y + threadIdx.y;
-}
-
-inline __device__ float3 segmentFloat4(float4 f4) {
-	return make_float3(f4.x, f4.y, f4.z);
-}
-
-__device__ void calculatePartitionAcceleration(float3 *acceleration) {
+template<class F3>
+__device__ void calculatePartitionAcceleration(F3 *acceleration) {
 	for (int q = 0; q < blockDim.x; q++) {
-		float3 tempA = calculateBodyAcceleration(body, interactingBodies[q]);
+		F3 tempA = calculateBodyAcceleration(body, interactingBodies[q]);
 		acceleration->x += tempA.x;
 		acceleration->y += tempA.y;
 		acceleration->z += tempA.z;
 	}
 }
 
-__device__ float3 calculateBodyAcceleration(float4 bi, float4 bj) {
-	float3 rij(bi.x - bj.x, bi.y - bj.y, bi.z - bj.z);
-	float3 partialAcc (rij.x * bj.w, rij.y * bj.w, rij.z * bj.z);
-	float smoothing = (rij.x * rij.x + rij.y * rij.y + rij.z * rij.z + epsilonSquared);
+template<class F, class F3, class F4>
+__device__ F3 calculateBodyAcceleration(F4 bi, F4 bj) {
+	F3 rij(bi.x - bj.x, bi.y - bj.y, bi.z - bj.z);
+	F3 partialAcc (rij.x * bj.w, rij.y * bj.w, rij.z * bj.z);
+	F smoothing = (rij.x * rij.x + rij.y * rij.y + rij.z * rij.z + epsilonSquared);
 	smoothing = smoothing * smoothing * smoothing;
 	smoothing = sqrtf(smoothing);
 	partialAcc.x /= smoothing;
@@ -45,7 +33,8 @@ __device__ float3 calculateBodyAcceleration(float4 bi, float4 bj) {
 	return partialAcc;
 }
 
-__device__ float3 updateBodyVelocity(float3 a, float4 v, float dt) { //velocity verlet
+template<class F, class F3, class F4>
+__device__ float3 updateBodyVelocity(F3 a, F4 v, F dt) { //velocity verlet
 	float3 newV;
 	newV.x = v.x + 0.5 * a.x * dt;
 	newV.y = v.y + 0.5 * a.y * dt;
@@ -53,25 +42,27 @@ __device__ float3 updateBodyVelocity(float3 a, float4 v, float dt) { //velocity 
 	return newV;
 }
 
-__device__ void updateBodyPosition(float3 velocity, float4 *r, float dt) {
+template<class F, class F3, class F4>
+__device__ void updateBodyPosition(F3 velocity, F4 *r, float dt) {
 	r->x += acceleration.x * dt;
 	r->y += acceleration.y * dt;
 	r->z += acceleration.z * dt;
 }
 
-__global__ void simulateNaive(float4 *bodies, float4 *dynamics, int n_particles) {
+template<class F, class F3, class F4>
+__global__ void simulateNaive(F4 *bodies, F4 *dynamics, F _dt, int n_particles) {
 	const int MAX_THREAD_COUNT = 1024;
-	const float dt = 0.00001;
+	F dt = _dt;
 	int particleId = blockDim.x * blockIdx.x + threadIdx.x;
 	int nParticles = n_particles;
-	float4 body = bodies[particleId];
-	float4 dynamic = dynamics[particleId];
-	float3 velocity(dynamic.x, dynamic.y, dynamic.z);
-	float3 r(body.x, body.y, body.z);
-	float3 acceleration(0.0f, 0.0f, 0.0f);
+	F4 body = bodies[particleId];
+	F4 dynamic = dynamics[particleId];
+	F3 velocity(dynamic.x, dynamic.y, dynamic.z);
+	F3 r(body.x, body.y, body.z);
+	F3 acceleration(0.0f, 0.0f, 0.0f);
 	extern __shared__ float4 interactingBodies[];
 
-	float3 vHalf = updateBodyVelocity(acceleration, velocity, dt, true);
+	F3 vHalf = updateBodyVelocity(acceleration, velocity, dt, true);
 	body.x += vHalf.x * dt;
 	body.y += vHalf.y * dt;
 	body.z += vHalf.z * dt;
@@ -93,12 +84,13 @@ __global__ void simulateNaive(float4 *bodies, float4 *dynamics, int n_particles)
 	dynamics[particleId] = dynamic;
 }
 
+template<class F4>
 __global__ void generateParticles(curandState *_state, float4 *bodies, float4 *dynamics, float4 *ranges) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;
-	float4 body = bodies[idx];
-	float4 dynamic = dynamics[idx];
-	float4 range = ranges[idx];
-	float4 range2 = ranges[idx + 1];
+	F4 body = bodies[idx];
+	F4 dynamic = dynamics[idx];
+	F4 range = ranges[idx];
+	F4 range2 = ranges[idx + 1];
 	curandState state = _state[idx];
 
 	body.x = (curand_uniform(&state) * (range.x - range.y + 0.999999)) + range.y;
@@ -110,18 +102,20 @@ __global__ void generateParticles(curandState *_state, float4 *bodies, float4 *d
 	body.w = (curand_uniform(&state) * (range2.x - range2.y + 0.999999)) + range2.y;
 }
 
-void beginUniverseSimulation(int numberOfParticles, int partitions, int epochs) { //add ability to serialize from past renders.
-	size_t allocationSize = sizeof(float4) * numberOfParticles;
-	size_t rangeAllcSize = sizeof(float4) * numberOfParticles * 2;
-	float dt = 0.01;
-	float4 *bodies = malloc(allocationSize);
-	float4 *dynamics = malloc(allocationSize);
-	float4 *generationRanges = malloc(rangeAllcSize); //[pos_h, pos_l, vel_h, vel_l]; [mass_h, mass_l, etc, etc]
-	float3 *accelerations = malloc(allocationSize);
-	float4 *dBodies;
-	float4 *dDynamics;
-	float4 *dGenerationRanges;
-	float4 *dAccelerations;
+template<class F, class F3, class F4>
+void beginSimulation(int numberOfParticles, int partitions, int epochs, F _dt, F _epsilon) { //add ability to serialize from past renders.
+	size_t allocationSize = sizeof(F4) * numberOfParticles;
+	size_t rangeAllcSize = sizeof(F4) * numberOfParticles * 2;
+	F dt = _dt;
+	F epsilon = _epsilon;
+	F3 *bodies = malloc(allocationSize);
+	F4 *dynamics = malloc(allocationSize);
+	F4 *generationRanges = malloc(rangeAllcSize); //[pos_h, pos_l, vel_h, vel_l]; [mass_h, mass_l, etc, etc]
+	F3 *accelerations = malloc(allocationSize);
+	F4 *dBodies;
+	F4 *dDynamics;
+	F4 *dGenerationRanges;
+	F4 *dAccelerations;
 	dim3 blocks(numberOfParticles / partitions, 0, 0);
 	dim3 threads(partitions, 0, 0);
 	curandState *dState;
@@ -139,7 +133,7 @@ void beginUniverseSimulation(int numberOfParticles, int partitions, int epochs) 
 	generateParticles<<<blocks, threads>>>(dBodies, dDynamics, dGenerationRanges);
 
 	for (int i = 0; i < epochs; i++) {
-		simulateNaive<<<blocks, threads, sizeof(float4) * partitions>>>(dBodies, dDynamics, numberOfParticles, dt, epochs);
+		simulateNaive<<<blocks, threads, sizeof(F4) * partitions>>>(dBodies, dDynamics, numberOfParticles, dt, epochs);
 		cudaMemcpy(bodies, dBodies, cudaMemcpyDeviceToHost); //copy back to save to binary file
 		cudaMemcpy(dyanmics, dDynamics, cudaMemcpyDeviceToHost);
 		cudaMemcpy(generationRanges, dGenerationRanges, cudaMemcpyDeviceToHost);
@@ -147,6 +141,7 @@ void beginUniverseSimulation(int numberOfParticles, int partitions, int epochs) 
 	}
 }
 
-void resumeUniverseSimulation() {
+template<class F, class F3, class F4>
+void resumeSimulation() {
 
 }

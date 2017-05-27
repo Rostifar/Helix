@@ -1,5 +1,7 @@
 #Project files
-
+.ptp-sync
+.settings
+Debug
 *.cproject
 *.project
 

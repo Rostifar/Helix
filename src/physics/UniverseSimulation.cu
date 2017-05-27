@@ -11,20 +11,10 @@
 
 __constant__ float G = 6.67300E-11;
 
-template<typename F3, typename F4>
-__device__ void calculatePartitionAcceleration(F4 body, F3 *acceleration) {
-	for (int q = 0; q < blockDim.x; q++) {
-		F3 tempA = calculateBodyAcceleration(body, interactingBodies[q]);
-		acceleration->x += tempA.x;
-		acceleration->y += tempA.y;
-		acceleration->z += tempA.z;
-	}
-}
-
 template<typename F, typename F3, typename F4>
-__device__ F3 calculateBodyAcceleration(F4 bi, F4 bj) {
-	F3 rij(bi.x - bj.x, bi.y - bj.y, bi.z - bj.z);
-	F3 partialAcc (rij.x * bj.w, rij.y * bj.w, rij.z * bj.z);
+__device__ F3 calculateBodyAcceleration(F4 bi, F4 bj, F epsilonSquared) {
+	F3 rij = {bi.x - bj.x, bi.y - bj.y, bi.z - bj.z};
+	F3 partialAcc = {rij.x * bj.w, rij.y * bj.w, rij.z * bj.z};
 	F smoothing = (rij.x * rij.x + rij.y * rij.y + rij.z * rij.z + epsilonSquared);
 	smoothing = smoothing * smoothing * smoothing;
 	smoothing = sqrtf(smoothing);
@@ -35,8 +25,18 @@ __device__ F3 calculateBodyAcceleration(F4 bi, F4 bj) {
 }
 
 template<typename F, typename F3, typename F4>
-__device__ float3 updateBodyVelocity(F3 a, F4 v, F dt) { //velocity verlet
-	float3 newV;
+__device__ void calculatePartitionAcceleration(F4 body, F3 *acceleration, F4 *sharedParticles, F epsilon) {
+	for (int q = 0; q < blockDim.x; q++) {
+		F3 tempA = calculateBodyAcceleration<F, F3, F4>(body, sharedParticles[q], epsilon * epsilon);
+		acceleration->x += tempA.x;
+		acceleration->y += tempA.y;
+		acceleration->z += tempA.z;
+	}
+}
+
+template<typename F, typename F3, typename F4>
+__device__ F3 updateBodyVelocity(F3 a, F4 v, F dt) { //velocity verlet
+	F3 newV;
 	newV.x = v.x + 0.5 * a.x * dt;
 	newV.y = v.y + 0.5 * a.y * dt;
 	newV.z = v.z + 0.5 * a.z * dt;
@@ -51,26 +51,23 @@ __device__ void updateBodyPosition(F3 velocity, F4 *r, float dt) {
 }
 
 template<typename F, typename F3, typename F4>
-__global__ void simulateNaive(F4 *bodies, F4 *dynamics, F _dt, F _epsilon, int n_particles) {
-	const int MAX_THREAD_COUNT = 1024;
+__global__ void simulateNaive(F4 *bodies, F4 *dynamics, F3 *accelerations, F _dt, F _epsilon, int n_particles) {
 	F dt = _dt;
 	int particleId = blockDim.x * blockIdx.x + threadIdx.x;
-	int nParticles = n_particles;
 	F4 body = bodies[particleId];
 	F4 dynamic = dynamics[particleId];
-	F3 velocity(dynamic.x, dynamic.y, dynamic.z);
-	F3 r(body.x, body.y, body.z);
-	F3 acceleration(0.0f, 0.0f, 0.0f);
-	extern __shared__ float4 interactingBodies[];
+	F3 velocity = {dynamic.x, dynamic.y, dynamic.z};
+	F3 acceleration = accelerations[particleId];
+	__shared__ F4 *interactingBodies;
 
-	F3 vHalf = updateBodyVelocity(acceleration, velocity, dt, true);
+	F3 vHalf = updateBodyVelocity(acceleration, velocity, dt);
 	body.x += vHalf.x * dt;
 	body.y += vHalf.y * dt;
 	body.z += vHalf.z * dt;
 	for (int i = 0; i < n_particles; i += blockDim.x) {
 		interactingBodies[threadIdx.x] = bodies[threadIdx.x + i];
 		__syncthreads();
-		calculatePartitionAcceleration(&acceleration);
+		calculatePartitionAcceleration<F, F3, F4>(body, &acceleration, interactingBodies, _epsilon);
 		__syncthreads();
 	}
 	acceleration.x *= G;
@@ -119,22 +116,21 @@ void beginSimulation(UniverseSimSpec<F> *spec, F4 *ranges) {
 	F4 *states = (F4 *)malloc(allocationSize);
 	F3 *accelerations = (F3 *)malloc(allocationSize);
 	F4 *generationRanges = (F4 *)malloc(allocationSize * 2); //[pos_h, pos_l, vel_h, vel_l]; [mass_h, mass_l, etc, etc]
-	F4 *dBodies, *dDynamics, *dGenerationRanges;
-	F3 *dAccelerations;
+	F4 *dBodies = cudaAlloCopy<F4>(bodies, allocationSize);
+	F4 *dDynamics = cudaAlloCopy<F4>(dynamics, allocationSize);
+	F4 *dGenerationRanges = cudaAlloCopy<F4>(ranges, allocationSize * 2);
+	F3 *dAccelerations = cudaAlloCopy<F3>(accelerations, allocationSize);
 	dim3 blocks(spec->particles / spec->partitions, 0, 0);
 	dim3 threads(spec->partitions, 0, 0);
 	curandState *dStates;
 
 	cudaMalloc(&dStates, allocationSize);
 	cudaMemcpy(dStates, states, allocationSize, cudaMemcpyHostToDevice);
-	cudaAlloCopy<F4>(bodies, dBodies, allocationSize);
-	cudaAlloCopy<F4>(dynamics, dDynamics, allocationSize);
-	cudaAlloCopy<F4>(ranges, dBodies, allocationSize * 2);
-	cudaAlloCopy<F3>(accelerations, dAccelerations, allocationSize);
+
 	generateParticles<F4><<<blocks, threads>>>(dStates, dBodies, dDynamics, dGenerationRanges);
 
 	for (int i = 0; i < spec->epochs; i++) {
-		simulateNaive<F, F3, F4><<<blocks, threads, sizeof(F4) * spec->partitions>>>(dBodies, dDynamics, dt, epsilon, spec->particles);
+		simulateNaive<F, F3, F4><<<blocks, threads, sizeof(F4) * spec->partitions>>>(dBodies, dDynamics, dAccelerations, dt, epsilon, spec->particles);
 		cudaMemcpy(bodies, dBodies, cudaMemcpyDeviceToHost); //copy back to save to binary file
 		cudaMemcpy(dynamics, dDynamics, cudaMemcpyDeviceToHost);
 		cudaMemcpy(generationRanges, dGenerationRanges, cudaMemcpyDeviceToHost);

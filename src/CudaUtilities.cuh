@@ -8,9 +8,10 @@
 #ifndef CUDAUTILITIES_CUH_
 #define CUDAUTILITIES_CUH_
 
-void *fixedCudaMalloc(size_t len);
+namespace Helix {
+	void *fixedCudaMalloc(size_t len);
 
-template<typename FN>
-void cudaAlloCopy(FN *org, FN *res, const size_t size);
-
+	template<typename FN>
+	FN *cudaAlloCopy(FN *org, const size_t size);
+}
 #endif /* CUDAUTILITIES_CUH_ */

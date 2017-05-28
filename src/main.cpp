@@ -1,35 +1,27 @@
-#include "SimulationUtilities.h"
 #include <memory>
 #include <iostream>
 #include <string>
+#include "physics/UniverseSimulation.cuh"
+#include <cuda.h>
+#include "vector_types.h"
 
-int main() { //add save positions
-	int option;
-	std::cout << "WELCOME TO THE GREATEST APP IN THE WORLD." << std::endl;
-	std::cout << "Options: " << std::endl;
-	std::cout << "[1] Start a new simulation." << std::endl;
-	std::cout << "[2] Resume simulation" << std::endl;
-	std::cout << "....." << std::endl;
-	std::cin >> option;
+namespace Helix {
+	int main() { //add save positions
+		Helix::UniverseSimSpec<float> spec;
+		spec.epochs = 2;
+		spec.particles = 512;
+		spec.partitions = 32;
+		spec.dt = 0.01;
+		spec.epsilon = 0.004;
 
-	if (option == 0) {
-		UniverseSimSpec *spec = new UniverseSimSpec();
-		std::cout << "How many particles:" << std::endl;
-		std::cin >> spec->epochs;
-		std::cout << "How many partitions:" << std::endl;
-		std::cin >> spec->partitions;
-		std::cout << "How many epochs:" << std::endl;
-		std::cin >> spec->epochs;
-		std::cout << "What ranges: [position_high, position_low, velocity_high, velocity_low, mass_high, mass_low]" << std::endl;
-
-
-	}
-	else if (option == 0) {
+		float4 *ranges = (float4 *)malloc(sizeof(float4) * 2);
+		ranges[0].x = 500;
+		ranges[0].y = -500;
+		ranges[0].z = 50.0f;
+		ranges[0].w = -50.0f;
+		ranges[1].x = 1000.0f;
+		ranges[1].y = 2.0f;
+		Helix::beginSimulation<float, float3, float4>(&spec, ranges);
 		return 0;
 	}
-	else {
-		return 0;
-	}
-	cudaDeviceSynchronize();
-	return 0;
 }

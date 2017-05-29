@@ -4,24 +4,20 @@
 #include "physics/UniverseSimulation.cuh"
 #include <cuda.h>
 #include "vector_types.h"
+#include "DataTypes.h"
 
 namespace Helix {
 	int main() { //add save positions
-		Helix::UniverseSimSpec<float> spec;
-		spec.epochs = 2;
-		spec.particles = 512;
-		spec.partitions = 32;
-		spec.dt = 0.01;
-		spec.epsilon = 0.004;
+		FN<float> ranges(9);
+		ranges =
+			{
+				2.3E9, -2.3E9, UNIFORM,
+				1.0E3, -1.0E3, GAUSSIAN,
+				1.0E3, 1.0E-2, GAUSSIAN
+			};
 
-		float4 *ranges = (float4 *)malloc(sizeof(float4) * 2);
-		ranges[0].x = 500;
-		ranges[0].y = -500;
-		ranges[0].z = 50.0f;
-		ranges[0].w = -50.0f;
-		ranges[1].x = 1000.0f;
-		ranges[1].y = 2.0f;
-		Helix::beginSimulation<float, float3, float4>(&spec, ranges);
+		UniverseSimulator<float> simulator(1024, 32, DataFmt::UNIFORM, 2, 0.004, 0.004);
+
 		return 0;
 	}
 }

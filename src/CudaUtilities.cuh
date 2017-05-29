@@ -11,7 +11,7 @@
 namespace Helix {
 	void *fixedCudaMalloc(size_t len);
 
-	template<typename FN>
-	FN *cudaAlloCopy(FN *org, const size_t size);
+	template<typename F>
+	F *cudaAlloCopy(F *org, const size_t size);
 }
 #endif /* CUDAUTILITIES_CUH_ */

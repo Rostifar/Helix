@@ -44,7 +44,7 @@ __device__ F3 updateBodyVelocity(F3 a, F4 v, F dt) { //velocity verlet
 	return newV;
 }
 
-template<typename F, typename F3, typename F4>
+template<typename F>
 __global__ void simulateNaive(F4 *bodies, F4 *dynamics, F3 *accelerations, F _dt, F _epsilon, int n_particles) {
 	F dt = _dt;
 	int particleId = blockDim.x * blockIdx.x + threadIdx.x;
@@ -82,44 +82,14 @@ __global__ void simulateNaive(F4 *bodies, F4 *dynamics, F3 *accelerations, F _dt
 	dynamics[particleId] = dynamic;
 }
 
-template<typename F4>
-__global__ void generateParticlesPure(curandState *_state, F4 *bodies, F4 *dynamics, F4 *ranges) {
-	int idx = blockDim.x * blockIdx.x + threadIdx.x;
-	F4 range = ranges[idx];
-	F4 range2 = ranges[idx + 1];
-	curandState state = _state[idx];
+template<typename F>
+void beginSimulation(UniverseSimSpec<F> *_specs, Helix::FN<F> *_ranges) {
+	F 	 *dBodies;
+	dim3 blocks 				(_specs->particles / _specs->partitions, 0, 0);
+	dim3 threads				(_specs->partitions, 0, 0);
+	Helix::FN<F> bodies			(_specs->particles * _specs->offset);
+	Helix::generateParticles<F> (_ranges->vec, bodies.vec, dBodies, blocks, threads, _specs->offset);
 
-	bodies[idx].x = (curand_uniform(&state) * (range.x - range.y + 0.999999)) + range.y;
-	bodies[idx].y = (curand_uniform(&state) * (range.x - range.y + 0.999999)) + range.y;
-	bodies[idx].z = (curand_uniform(&state) * (range.x - range.y + 0.999999)) + range.y;
-	dynamics[idx].x = (curand_uniform(&state) * (range.z - range.w + 0.999999)) + range.w;
-	dynamics[idx].y = (curand_uniform(&state) * (range.z - range.w + 0.999999)) + range.w;
-	dynamics[idx].z = (curand_uniform(&state) * (range.z - range.w + 0.999999)) + range.w;
-	bodies[idx].w = (curand_uniform(&state) * (range2.x - range2.y + 0.999999)) + range2.y;
-}
-
-template<typename F, typename F3, typename F4>
-void beginSimulation(UniverseSimSpec<F> *spec, F4 *ranges) {
-	size_t allocationSize = sizeof(F4) * spec->particles;
-	F dt = spec->dt;
-	F epsilon = spec->epsilon;
-	F4 *bodies = (F4 *)malloc(allocationSize);
-	F4 *dynamics = (F4 *)malloc(allocationSize);
-	F4 *states = (F4 *)malloc(allocationSize);
-	F3 *accelerations = (F3 *)malloc(allocationSize);
-	 //[pos_h, pos_l, vel_h, vel_l]; [mass_h, mass_l, etc, etc]
-	F4 *dBodies = cudaAlloCopy<F4>(bodies, allocationSize);
-	F4 *dDynamics = cudaAlloCopy<F4>(dynamics, allocationSize);
-	F4 *dGenerationRanges = cudaAlloCopy<F4>(ranges, sizeof(float4) * 2);
-	F3 *dAccelerations = cudaAlloCopy<F3>(accelerations, allocationSize);
-	dim3 blocks(spec->particles / spec->partitions, 0, 0);
-	dim3 threads(spec->partitions, 0, 0);
-	curandState *dStates;
-
-	cudaMalloc(&dStates, allocationSize);
-	cudaMemcpy(dStates, states, allocationSize, cudaMemcpyHostToDevice);
-
-	generateParticles<F4><<<blocks, threads>>>(dStates, dBodies, dDynamics, dGenerationRanges);
 	for (int i = 0; i < spec->epochs; i++) {
 		simulateNaive<F, F3, F4><<<blocks, threads, sizeof(F4) * spec->partitions>>>(dBodies, dDynamics, dAccelerations, dt, epsilon, spec->particles);
 		cudaMemcpy(bodies, dBodies, allocationSize,cudaMemcpyDeviceToHost); //copy back to save to binary file
@@ -130,4 +100,3 @@ void beginSimulation(UniverseSimSpec<F> *spec, F4 *ranges) {
 template void beginSimulation <float, float3, float4>(UniverseSimSpec<float> *, float4 *);
 template void beginSimulation <double, double3, double4>(UniverseSimSpec<double> *, double4 *);
 }
-

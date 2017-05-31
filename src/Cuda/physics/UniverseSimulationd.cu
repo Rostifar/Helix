@@ -7,7 +7,8 @@
 #include "cuda_runtime.h"
 #include "UniverseSimulation.cuh"
 #include <stdio.h>
-#include "../CudaUtilities.cuh"
+#include "../Types.cuh"
+#include "ParticleGenerator.cuh"
 
 namespace Helix {
 __constant__ float G = 6.67300E-11;
@@ -35,34 +36,45 @@ __device__ void calculatePartitionAcceleration(F4 body, F3 *acceleration, F4 *sh
 	}
 }
 
-template<typename F, typename F3, typename F4>
-__device__ F3 updateBodyVelocity(F3 a, F4 v, F dt) { //velocity verlet
-	F3 newV;
-	newV.x = v.x + 0.5 * a.x * dt;
-	newV.y = v.y + 0.5 * a.y * dt;
-	newV.z = v.z + 0.5 * a.z * dt;
-	return newV;
+template<typename F>
+__device__ inline void updateBodyVelocity(F *particle, F dt) { //velocity verlet
+	particle[3] += 0.5 * particle[6] * dt;
+	particle[4] += 0.5 * particle[7] * dt;
+	particle[5] += 0.5 * particle[8] * dt;
 }
 
 template<typename F>
-__global__ void simulateNaive(F4 *bodies, F4 *dynamics, F3 *accelerations, F _dt, F _epsilon, int n_particles) {
-	F dt = _dt;
-	int particleId = blockDim.x * blockIdx.x + threadIdx.x;
-	F4 body = bodies[particleId];
-	F4 dynamic = dynamics[particleId];
-	F3 velocity = {dynamic.x, dynamic.y, dynamic.z};
-	F3 acceleration = accelerations[particleId];
-	__shared__ F4 *interactingBodies;
+__device__ inline void updateBodyPosition(F *particle, F dt) {
+	particle[0] += particle[3] * dt;
+	particle[1] += particle[4] * dt;
+	particle[2] += particle[5] * dt;
+}
 
-	F3 vHalf = updateBodyVelocity(acceleration, velocity, dt);
-	body.x += vHalf.x * dt;
-	body.y += vHalf.y * dt;
-	body.z += vHalf.z * dt;
-	for (int i = 0; i < n_particles; i += blockDim.x) {
-		interactingBodies[threadIdx.x] = bodies[threadIdx.x + i];
+template<typename F>
+__device__ void cacheLocalBodies(F *interactingBodies, int start, int end) {
+	for (; start <= end; start++) {
+		interactingBodies[start] =
+	}
+}
+
+template<typename F>
+__global__ void simulateNaive(F *particles, int offset, F _dt, F _epsilon, int n_particles) {
+	int        particleId = blockDim.x * blockIdx.x + threadIdx.x;
+	int 	   idx 	      = particleId * offset;
+	F 		   particle[10];
+	__shared__ F interactingBodies[];
+
+	for (int i = 0; i < offset; i++) particle[i] = particles[idx + i];
+
+	updateBodyVelocity<F>(particle, dt);
+	updateBodyPosition<F>(particle, dt);
+
+	for (int i = 0, localIdx = threadIdx.x * offset; i < n_particles; i += blockDim.x) {
+		cacheLocalBodies(interactingBodies, localIdx, localIdx + offset);
 		__syncthreads();
-		calculatePartitionAcceleration<F, F3, F4>(body, &acceleration, interactingBodies, _epsilon);
+		calculatePartitionAcceleration<F, F3, F4>(body, &acceleration, interactingBodies, _epsilon); //pass empty custon struct to array
 		__syncthreads();
+		localIdx += i;
 	}
 	acceleration.x *= G;
 	acceleration.y *= G;
@@ -83,20 +95,24 @@ __global__ void simulateNaive(F4 *bodies, F4 *dynamics, F3 *accelerations, F _dt
 }
 
 template<typename F>
-void beginSimulation(UniverseSimSpec<F> *_specs, Helix::FN<F> *_ranges) {
-	F 	 *dBodies;
-	dim3 blocks 				(_specs->particles / _specs->partitions, 0, 0);
-	dim3 threads				(_specs->partitions, 0, 0);
-	Helix::FN<F> bodies			(_specs->particles * _specs->offset);
-	Helix::generateParticles<F> (_ranges->vec, bodies.vec, dBodies, blocks, threads, _specs->offset);
+void beginUniSimNaive(UniverseParams<F> *params, GenerationLimits<F> *limits) {
+	dim3 blocks  (params->particles / params->partitions, 0, 0);
+	dim3 threads (params->partitions, 0, 0);
+	F4<F> *particles  = malloc (sizeof(F4<F>) * params->offset * params->particles);
+	F4<F> *dParticles = cudaAlloCopy<F4<F>>(particles, sizeof(particles));
 
-	for (int i = 0; i < spec->epochs; i++) {
+	distributionGeneration<F> (particles, dParticles, limits, params->particles, &blocks, &threads);
+
+	for (int i = 0; i < params->epochs; i++) {
 		simulateNaive<F, F3, F4><<<blocks, threads, sizeof(F4) * spec->partitions>>>(dBodies, dDynamics, dAccelerations, dt, epsilon, spec->particles);
 		cudaMemcpy(bodies, dBodies, allocationSize,cudaMemcpyDeviceToHost); //copy back to save to binary file
 		cudaMemcpy(dynamics, dDynamics, allocationSize, cudaMemcpyDeviceToHost);
 		cudaMemcpy(accelerations, dAccelerations, allocationSize, cudaMemcpyDeviceToHost); //yo lance sucks
 	}
+
+	cudaFree(dParticles);
+	delete particles;
 }
-template void beginSimulation <float, float3, float4>(UniverseSimSpec<float> *, float4 *);
-template void beginSimulation <double, double3, double4>(UniverseSimSpec<double> *, double4 *);
+template void beginUniSim <float> (UniverseParams<float> *, GenerationLimits<float> *);
+template void beginUniSim <double>(UniverseParams<double> *, GenerationLimits<double> *);
 }

@@ -1,23 +1,25 @@
 #include <memory>
 #include <iostream>
 #include <string>
-#include "physics/UniverseSimulation.cuh"
+#include "Cuda/physics/UniverseSimulation.h"
 #include <cuda.h>
 #include "vector_types.h"
-#include "DataTypes.h"
+#include "Types.cuh"
+#include "Cuda/CudaUtilities.cuh"
 
-namespace Helix {
-	int main() { //add save positions
-		FN<float> ranges(9);
-		ranges =
-			{
-				2.3E9, -2.3E9, UNIFORM,
-				1.0E3, -1.0E3, GAUSSIAN,
-				1.0E3, 1.0E-2, GAUSSIAN
-			};
+int main() {
+	Helix::UniverseSimulation<float>(1024, 0.02, 0.01);
 
-		UniverseSimulator<float> simulator(1024, 32, DataFmt::UNIFORM, 2, 0.004, 0.004);
 
-		return 0;
-	}
+
+	Helix::F4<float> ceilings   = Helix::makeF4(2.3E9, 1.0E3, 0, 1.0E3);
+	Helix::F4<float> floors     = Helix::makeF4(-2.3E9, -1.0E3, 0, 1.0E-2);
+	Helix::F4<int>   distrTypes = Helix::makeF4(UNIFORM, GAUSSIAN, NONE, GAUSSIAN);
+	int	             *strides   = {3, 1, 3, 3};
+
+	Helix::GenerationLimits<Helix::F4<float>> limits(12, ceilings, floors, distrTypes, strides);
+	Helix::UniverseParams<float> params(0.5, 0.04, 1024, 32, 2, 3);
+	Helix::beginUniSimNaive<float>(&params, &limits);
+	return 0;
 }
+

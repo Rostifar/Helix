@@ -1,5 +1,5 @@
-#include "CudaUtilities.cuh"
 #include <typeinfo>
+#include "CudaUtilities.cuh"
 
 namespace Helix {
 	void *fixedCudaMalloc(size_t len) {

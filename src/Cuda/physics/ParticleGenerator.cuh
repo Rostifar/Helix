@@ -5,17 +5,20 @@
  *      Author: rostifar
  */
 #include "../Types.cuh"
+#include "UniverseSimulation.h"
 
 #ifndef PARTICLEGENERATOR_CUH_
 #define PARTICLEGENERATOR_CUH_
 
 namespace Helix {
 
-enum Platform {
+typedef enum Platform {
 	CPU,
 	GPU
-}
+};
 
+template<typename F>
+void densityParticleGeneration(UniLimitFmt<F> *limits, int n, F *_particles, F *_dParticles);
 
 template<typename F>
 void distributionGeneration(F4<F> *_particles, F4<F> *_dParticles, GenerationLimits<F4<F>> *limits, int nParticles, dim3 *blocks, dim3 *threads, int offset, bool localCpy = false);

@@ -5,7 +5,7 @@
 #include <curand.h>
 #include <curand_kernel.h>
 #include "cuda_runtime.h"
-#include "UniverseSimulation.cuh"
+#include "UniverseSimulation.h"
 #include <stdio.h>
 #include "../Types.cuh"
 #include "ParticleGenerator.cuh"
@@ -95,17 +95,17 @@ __global__ void simulateNaive(F *particles, int offset, F _dt, F _epsilon, int n
 }
 
 template<typename F>
-void beginUniSimNaive(UniverseParams<F> *params, GenerationLimits<F> *limits) {
-	dim3 blocks  (params->particles / params->partitions, 0, 0);
-	dim3 threads (params->partitions, 0, 0);
-	F4<F> *particles  = malloc (sizeof(F4<F>) * params->offset * params->particles);
-	F4<F> *dParticles = cudaAlloCopy<F4<F>>(particles, sizeof(particles));
+void startUniverseKernel(F epsilon, F dt, int n, int p, int epochs, UniLimitFmt<F> limits) {
+	dim3 blocks  (n / p, 0, 0);
+	dim3 threads (p, 0, 0);
+	F *particles = malloc(sizeof(F) * n * UniParticle<F>::len);
+	F *dParticles = cudaAlloCopy<F>(particles, sizeof(particles));
 
 	distributionGeneration<F> (particles, dParticles, limits, params->particles, &blocks, &threads);
 
 	for (int i = 0; i < params->epochs; i++) {
 		simulateNaive<F, F3, F4><<<blocks, threads, sizeof(F4) * spec->partitions>>>(dBodies, dDynamics, dAccelerations, dt, epsilon, spec->particles);
-		cudaMemcpy(bodies, dBodies, allocationSize,cudaMemcpyDeviceToHost); //copy back to save to binary file
+		cudaMemcpy(bodies, dBodies, allocationSize,cudaMemcpyDeviceToHost); //implement callback to class
 		cudaMemcpy(dynamics, dDynamics, allocationSize, cudaMemcpyDeviceToHost);
 		cudaMemcpy(accelerations, dAccelerations, allocationSize, cudaMemcpyDeviceToHost); //yo lance sucks
 	}

@@ -14,10 +14,13 @@ namespace Helix {
 
 typedef enum Platform {
 	CPU,
-	GPU
+	GPU,
+	PolyGpu
 };
 
 void *fixedCudaMalloc(size_t len);
+
+bool gpuSupported();
 
 template<typename F>
 F *cudaAlloCopy(F *org, const size_t size);

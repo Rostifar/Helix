@@ -6,7 +6,8 @@
  */
 #include "../Types.cuh"
 #include <string>
-#include "UniverseSimulation.cuh"
+#include "UniverseSimulationKernel.cuh"
+#include "ParticleGenerator.cuh"
 
 #ifndef UNIVERSESIMULATION_H_
 #define UNIVERSESIMULATION_H_
@@ -82,7 +83,7 @@ F4<F> *UniLimitFmt<F>::toCudaFmt() {
 template<typename F>
 class UniverseSimulation {
 public:
-	UniverseSimulation(int _nParticles, int _epsilon, F _dt);
+	UniverseSimulation(int _nParticles, int _epsilon, F _dt, Platform platform = Platform::GPU);
 	void addGenerationLimits(UniLimitFmt<F> *limits);
 	void beginUniverseSimulation();
 	void resumeUniverseSimulation(std::string file);
@@ -111,7 +112,7 @@ private:
 };
 
 template<typename F>
-UniverseSimulation<F>::UniverseSimulation(int _nParticles, int _epsilon, F _dt) {
+UniverseSimulation<F>::UniverseSimulation(int _nParticles, int _epsilon, F _dt, Platform platform = Platform::CPU) {
 	n	= nParticles;
 	epsilon	= _epsilon;
 	dt	= _dt;
@@ -147,6 +148,10 @@ void UniverseSimulation<F>::pregenerateLimits() {
 template<typename F>
 void UniverseSimulation<F>::beginUniverseSimulation() {
 	if (!limitsSet) pregenerateLimits();
+	if (!gpuSupported()) //implement me!
+	F *particles;
+	F *dParticles;
+	densityParticleGeneration<F>(&limits, n, particles, dParticles);
 }
 
 template<typename F>

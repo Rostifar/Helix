@@ -5,6 +5,7 @@
  *      Author: rostifar
  */
 #include "../Types.cuh"
+#include "UniverseSimulation.h"
 
 #ifndef UNIVERSESIMULATION_CUH_
 #define UNIVERSESIMULATION_CUH_
@@ -20,7 +21,7 @@
 namespace Helix {
 
 template<typename F>
-void beginUniSimNaive(UniverseParams<F> *params, GenerationLimits<F> *limits);
+void startUniverseKernel(F epsilon, F dt, int n, int p, int epochs, UniLimitFmt<F> limits);
 
 }
 

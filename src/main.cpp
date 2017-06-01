@@ -8,7 +8,10 @@
 #include "Cuda/CudaUtilities.cuh"
 
 int main() {
-	Helix::UniverseSimulation<float>(1024, 0.02, 0.01);
+	Helix::UniverseSimulation<float> sim(1024, 0.02, 0.01);
+	Helix::UniLimitFmt limits;
+	sim.addGenerationLimits()
+
 
 
 

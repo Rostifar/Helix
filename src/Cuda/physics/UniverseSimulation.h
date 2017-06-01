@@ -6,6 +6,7 @@
  */
 #include "../Types.cuh"
 #include <string>
+#include "UniverseSimulation.cuh"
 
 #ifndef UNIVERSESIMULATION_H_
 #define UNIVERSESIMULATION_H_
@@ -29,10 +30,10 @@ struct UniParticle {
 
 template<typename F>
 UniParticle<F>::UniParticle(F3<F> _r, F3<F> _velocity, F3<F> _acc, F _mass) {
-	r 			 = _r;
-	velocity 	 = _velocity;
-	acceleration = _acc;
-	mass 		 = _mass;
+	r 		= _r;
+	velocity	= _velocity;
+	acceleration	= _acc;
+	mass		= _mass;
 }
 
 template<typename F>
@@ -51,10 +52,10 @@ template<typename F>
 UniParticle<F> *toParticleFmt(F *arr) {
 	UniParticle<F> *particles = malloc(sizeof(arr));
 	for (int i = 0, q = 0; i < (sizeof(arr) / sizeof(F)) / particles->len; i++) {
-		particles[i].r 		      = makeF3(arr[q], arr[q + 1], arr[q + 2]); q += 3;
-		particles[i].velocity     = makeF3(arr[q], arr[q + 1], arr[q + 3]); q += 3;
-		particles[i].acceleration = makeF3(arr[q], arr[q + 1], arr[q + 3]); q += 3;
-		particles[i].mass 		  = arr[q];
+		particles[i].r			= makeF3(arr[q], arr[q + 1], arr[q + 2]); q += 3;
+		particles[i].velocity		= makeF3(arr[q], arr[q + 1], arr[q + 3]); q += 3;
+		particles[i].acceleration	= makeF3(arr[q], arr[q + 1], arr[q + 3]); q += 3;
+		particles[i].mass		= arr[q];
 	}
 	return particles;
 }
@@ -89,22 +90,31 @@ public:
 	virtual ~UniverseSimulation();
 
 private:
-	int            n;
-	int            epsilon;
-	int            epochs 		   = 0;
-	F   		   dt;
-	UniLimitFmt<F> limits;
-	bool		   limitsSet 	   = false;
-	Platform       genPlatform 	   = Platform::GPU;
-	Platform       computePlatform = Platform::CPU;
+	int		n;
+	int		epsilon;
+	int		epochs		= 0;
+	F		dt;
+	UniLimitFmt<F>	limits;
+	bool 		limitsSet	= false;
+	Platform	genPlatform	= Platform::GPU;
+	Platform	computePlatform	= Platform::CPU;
 	void pregenerateLimits();
+	
+	//Rough estimates for the amount of celestial bodies in the observable universe.
+	const F universeRadius = 8.8E23; //aka. 28.5 gpc
+	const F stars = 10E21;
+	const F planets = 1E24;
+	const F galaxies = 10E9;
+	const F celestrialBodies = stars + planets;
+	const F fastestBodies = 700; // km/s
+
 };
 
 template<typename F>
 UniverseSimulation<F>::UniverseSimulation(int _nParticles, int _epsilon, F _dt) {
-	n 			= nParticles;
-	epsilon 	= _epsilon;
-	dt 			= _dt;
+	n	= nParticles;
+	epsilon	= _epsilon;
+	dt	= _dt;
 }
 
 template<typename F>
@@ -115,7 +125,23 @@ void UniverseSimulation<F>::addGenerationLimits(UniLimitFmt<F> *_limits) {
 
 template<typename F>
 void UniverseSimulation<F>::pregenerateLimits() {
+	F scalar = celestrialBodies / universeRadius;
+    F estimateR = n / scalar;
+    limits.rLim.x = estimateR;
+    limits.rLim.y = -estimateR;
 
+    limits.vLim.x = 120;
+    limits.vLim.y = 120;
+    limits.aLim.x = 0;
+    limits.aLim.y = 0;
+
+    limits.mLim.x = 12 * 1.99E30;
+    limits.mLim.y = 1E3;
+	
+    limits.generationType.x = UNIFORM;
+    limits.generationType.y = GAUSSIAN;
+    limits.generaitonType.z = NONE;
+    limits.generationType.w = POISSON;
 }
 
 template<typename F>

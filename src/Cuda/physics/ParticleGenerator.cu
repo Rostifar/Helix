@@ -3,6 +3,8 @@
 #define GAUSSIAN 4096
 #define UNIFORM  24
 #define NONE	 0
+#define POISSON  96
+
 namespace Helix {
 
 template<typename F>
@@ -20,7 +22,11 @@ __global__ void generateRandomParticles(F4<F> *particles, F4<F> *limits, curandS
 	int 		idx	  = blockDim.x * blockIdx.x + threadIdx.x;
 	curandState state = states[idx];
 
-	for (int i = 0; i < )
+	for (int i = 0; i < offset; i++) {
+		int distribution = (int) limits->w;
+		F   dl 			 = limits->x - limits.y + 0.999999;
+
+	}
 
 	for (int i = 0, p = 0; i < sizeof(strides) / sizeof(strides[0]); i++, p += 3) {
 		int distribution = (int) limits[p + 2];

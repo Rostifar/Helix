@@ -37,6 +37,11 @@ static __device__ __inline__ __host__ F makeF3(F x, F y, F z) {
 	return t;
 }
 
+template<typename F>
+static __device__ __inline__ __host__ F makeF2(F x, F y) {
+	F2<F> t; t.x = x; t.y = y;
+	return t;
+}
 
 }
 #endif /* CUDAUTILITIES_CUH_ */

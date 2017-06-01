@@ -8,47 +8,113 @@
 #ifndef TYPES_CUH_
 #define TYPES_CUH_
 #include <stdexcept>
+#include <vector>
 
 namespace Helix {
 
 template<typename F>
 struct F2 {
 	F x, y;
-	static inline void	segment(F *arr, F2<F> a, int i);
-	static void			interSegment(F *arr, F2<F> *a, int i, int ceiling);
+	F operator[](int i);
+	static F *pkg(F2<F> *a);
+	static int map(F *arr, F2<F> *a, int i);
+	static F2<F> fuse(F a, F b);
 };
 
 template<typename F>
-void F2<F>::segment(F *arr, F2<F> a, int i) {
-	arr[i] = a.x; arr[i + 1].y;
+F F2<F>::operator [](int i) {
+	switch (i) {
+		case 0:
+			return x;
+		case 1:
+			return y;
+		default:
+			throw std::out_of_range("Error! Indexing out of range. F2 can only be indexed by 0, 1");
+	}
 }
 
 template<typename F>
-void F2<F>::interSegment(F *arr, F2<F> *a, int i, int ceiling) {
-	for (int q = 0; i < ceiling; q++) {
-		arr[i]	= a[q].x; ++i;
-		arr[i]	= a[q].y; ++i;
-	}
+F *F2<F>::pkg(F2<F> *a) {
+	F *arr = new F[2];
+	arr[0] = a->x; arr[1] = a->y;
+	return arr;
 }
+
+template<typename F>
+int F2<F>::map(F *arr, F2<F> *a, int i) {
+	int len = sizeof(a) / sizeof(F2<F>);
+	if (len == 1) {
+		arr[i] = a->x; arr[i + 1] = a->y;
+	}
+	else {
+		for (int q = 0; q < len; q++) {
+			arr[i] = a[q].x; ++i;
+			arr[i] = a[q].y; ++i;
+		}
+	}
+	return i;
+}
+
+template<typename F>
+F2<F> fuse(F a, F b) {
+	return makeF2(a, b);
+}
+
 
 
 template<typename F>
 struct F3 {
 	F x, y, z;
-	int map(F *arr, int i);
-	static F3<F> fuse   (F2<F> a, F b);
+	F operator[](int i);
+	static F *pkg(F3<F> *a);
+	static int map(F *arr, F3<F> *a, int i);
+	static F3<F> fuse(F2<F> *a, F b);
 };
 
 template<typename F>
-int F3<F>::map(F *arr, int i) {
-	arr[i] = x; arr[i + 1] = y; arr[i + 2] = z;
-	return i += 3;
+F F3<F>::operator[](int i) {
+	switch (i) {
+		case 0:
+			return x;
+		case 1:
+			return y;
+		case 2:
+			return z;
+		default:
+			throw std::out_of_range("Error! Indexing out of range. F3 can only be indexed by 0, 1, 2");
+	}
 }
 
 template<typename F>
-static F3<F> fuse(F2<F> a, F b)  {
-	return makeF3<F>(a.x, a.y, b);
+F *F3<F>::pkg(F3<F> *a) {
+	F *arr = new F[3];
+	arr[0] = x; arr[1] = y; arr[2] = z;
+	return arr;
 }
+
+template<typename F>
+int F3<F>::map(F *arr, F3<F> *a, int i) {
+	int len = sizeof(a) / sizeof(F3<F>);
+	if (len == 1) {
+		arr[i] = a->x; ++i;
+		arr[i] = a->y; ++i;
+		arr[i] = a->z; ++i;
+	}
+	else {
+		for (int q = 0; q < len; q++) {
+			arr[i] = a[q].x; ++i;
+			arr[i] = a[q].y; ++i;
+			arr[i] = a[q].z; ++i;
+		}
+	}
+	return i;
+}
+
+template<typename F>
+F3<F> F3<F>::fuse(F2<F> *a, F b)  {
+	return makeF3<F>(a->x, a->y, b);
+}
+
 
 
 template<typename F>

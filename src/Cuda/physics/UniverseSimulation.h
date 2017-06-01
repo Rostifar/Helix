@@ -31,9 +31,9 @@ struct UniParticle {
 
 template<typename F>
 UniParticle<F>::UniParticle(F3<F> _r, F3<F> _velocity, F3<F> _acc, F _mass) {
-	r 		= _r;
-	velocity	= _velocity;
-	acceleration	= _acc;
+	r		= _r;
+	velocity     	= _velocity;
+	acceleration 	= _acc;
 	mass		= _mass;
 }
 
@@ -68,15 +68,16 @@ struct UniLimitFmt {
 	F2<F> aLim;
 	F2<F> mLim;
 	F4<F> generationType;
-	F4<F> *toCudaFmt();
+	F *toCudaFmt();
+
+	const int len = 14;
 };
 
 template<typename F>
-F4<F> *UniLimitFmt<F>::toCudaFmt() {
-		F4<F> *fmt = new F4<F>[3];
-		fmt[0] = fuse<F>(rLim, vLim);
-		fmt[1] = fuse<F>(aLim, mLim);
-		fmt[2] = generationType;
+F *UniLimitFmt<F>::toCudaFmt() {
+		F *fmt = malloc(sizeof(F) * len);
+		F2<F>::interSegment<F>(fmt, {rLim, vLim, aLim, mLim}, 0, 8);
+		fmt[11] = generationType;
 		return fmt;
 	}
 
@@ -102,12 +103,12 @@ private:
 	void pregenerateLimits();
 	
 	//Rough estimates for the amount of celestial bodies in the observable universe.
-	const F universeRadius = 8.8E23; //aka. 28.5 gpc
-	const F stars = 10E21;
-	const F planets = 1E24;
-	const F galaxies = 10E9;
-	const F celestrialBodies = stars + planets;
-	const F fastestBodies = 700; // km/s
+	const F universeRadius	= 8.8E23; //aka. 28.5 gpc
+	const F stars		= 10E21;
+	const F planets		= 1E24;
+	const F galaxies	= 10E9;
+	const F celestrialBodies= stars + planets;
+	const F fastestBodies	= 700; // km/s
 
 };
 
@@ -126,7 +127,7 @@ void UniverseSimulation<F>::addGenerationLimits(UniLimitFmt<F> *_limits) {
 
 template<typename F>
 void UniverseSimulation<F>::pregenerateLimits() {
-	F scalar = celestrialBodies / universeRadius;
+	F scalar	= celestrialBodies / universeRadius;
     F estimateR = n / scalar;
     limits.rLim.x = estimateR;
     limits.rLim.y = -estimateR;

@@ -54,42 +54,31 @@ public:
 		y *= a;
 	}
 
-		F dot(Vector v) {
-			return (x * v.x + y * v.y + z * v.z);
-		}
+	F dot(Vector2<F> v) {
+		return (x * v.x + y * v.y);
+	}
 
-		Vector cross(Vector v) {
-			Vector<F> c;
-			c[0] = y * v.z - z * v.y;
-			c[1] = z * v.x - x * v.z;
-			c[2] = x * v.y - y * v.x;
-			return c;
+	void print() {
+		if(std::is_same<F, float>::value) {
+			printf("(%f, %f, %f)\n", x, y);
+		} else {
+			printf("(%lf, %lf, %lf)\n", x, y);
 		}
+	}
 
-		void normalize() {
-			F s = sqrt(x * x + y * y + z * z);
-			x /= s;
-			y /= s;
-			z /= s;
+	F *map() {
+		F *arr = new F[2];
+		for (int i = 0; i < len; i++) {
+			arr[i] = this[i];
 		}
+		return arr;
+	}
 
-		Vector normalized() {
-			Vector<F> n;
-			F s = sqrt(x * x + y * y + z * z);
-			x /= s;
-			y /= s;
-			z /= s;
-			return Vector(x, y, z);
+	void map(F *arr, int i) {
+		for (auto q = 0; i < len; q++, i++) {
+			arr[i] = this[q];
 		}
-
-		void print() {
-			if(std::is_same<F, float>::value) {
-				printf("(%f, %f, %f)\n", x, y, z);
-			} else {
-				printf("(%lf, %lf, %lf)\n", x, y, z);
-			}
-		}
-
+	}
 };
 
 template<typename F>
@@ -203,6 +192,20 @@ public:
 			printf("(%f, %f, %f)\n", x, y, z);
 		} else {
 			printf("(%lf, %lf, %lf)\n", x, y, z);
+		}
+	}
+
+	F *map() {
+		F *arr = new F[3];
+		for (int i = 0; i < len; i++) {
+			arr[i] = this[i];
+		}
+		return arr;
+	}
+
+	void map(F *arr, int i) {
+		for (auto q = 0; i < len; q++, i++) {
+			arr[i] = this[q];
 		}
 	}
 };

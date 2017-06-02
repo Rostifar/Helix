@@ -19,6 +19,7 @@ class Vector2 {
 public:
 	F x, y;
 	const auto len = 2;
+	typedef Vector2<F> vec2;
 
 	Vector2() {
 		x = 0;
@@ -41,12 +42,12 @@ public:
 		}
 	}
 
-	Vector operator + (Vector2<F> a) const {
-		return Vector2<F>(x + a.x, y + a.y);
+	vec2 operator + (vec2 a) const {
+		return vec2(x + a.x, y + a.y);
 	}
 
-	Vector operator - (Vector2<F> a) const {
-		return Vector2<F>(x - a.x, y - a.y);
+	vec2 operator - (vec2 a) const {
+		return vec2(x - a.x, y - a.y);
 	}
 
 	void scale(F a) {
@@ -54,7 +55,7 @@ public:
 		y *= a;
 	}
 
-	F dot(Vector2<F> v) {
+	F dot(vec2 v) {
 		return (x * v.x + y * v.y);
 	}
 
@@ -86,6 +87,7 @@ class Vector3 {
 public:
 	F x, y, z;
 	const auto len = 3;
+	typedef Vector3<F> vec3;
 
 	Vector3() {
 		x = 0;
@@ -97,19 +99,19 @@ public:
 		x = _x;
 		y = 0;
 		z = 0;
-	};
+	}
 
 	Vector3(F _x, F _y) {
 		x = _x;
 		y = _y;
 		z = 0;
-	};
+	}
 
 	Vector3(F _x, F _y, F _z) {
 		x = _x;
 		y = _y;
 		z = _z;
-	};
+	}
 
 	Vector3(Vector2<F> a, F b) {
 		x = a.x;
@@ -139,18 +141,18 @@ public:
 		}
 	}
 
-	Vector operator + (Vector v) const {
+	vec3 operator + (vec3 v) const {
 		F xr = x + v.x;
 		F yr = y + v.y;
 		F zr = z + v.z;
-		return Vector(xr, yr, zr);
+		return vec3(xr, yr, zr);
 	}
 
-	Vector operator - (Vector v) const {
+	vec3 operator - (vec3 v) const {
 		F xr = x - v.x;
 		F yr = y - v.y;
 		F zr = z - v.z;
-		return Vector(xr, yr, zr);
+		return vec3(xr, yr, zr);
 	}
 
 	void scale(F s) {
@@ -159,12 +161,12 @@ public:
 		z *= s;
 	}
 
-	F dot(Vector v) {
+	F dot(vec3 v) {
 		return (x * v.x + y * v.y + z * v.z);
 	}
 
-	Vector cross(Vector v) {
-		Vector<F> c;
+	vec3 cross(vec3 v) {
+		vec3 c;
 		c[0] = y * v.z - z * v.y;
 		c[1] = z * v.x - x * v.z;
 		c[2] = x * v.y - y * v.x;
@@ -184,7 +186,7 @@ public:
 		x /= s;
 		y /= s;
 		z /= s;
-		return Vector(x, y, z);
+		return vec3(x, y, z);
 	}
 
 	void print() {

@@ -4,10 +4,10 @@
  *  Created on: May 30, 2017
  *      Author: rostifar
  */
-#include "../Types.cuh"
 #include <string>
 #include "UniverseSimulationKernel.cuh"
 #include "ParticleGenerator.cuh"
+#include "../hTypes.h"
 
 #ifndef UNIVERSESIMULATION_H_
 #define UNIVERSESIMULATION_H_
@@ -15,77 +15,96 @@
 namespace Helix {
 
 template<typename F>
-struct UniParticle {
-	F3<F>  r;
-	F3<F>  velocity;
-	F3<F>  acceleration;
-	F	   mass;
-	size_t size = sizeof(F3<F>) * 3 + sizeof(F);
+class UniSimFmt {
+public:
+	Vector2<F> rLim;
+	Vector2<F> vLim;
+	Vector2<F> aLim;
+	Vector2<F> mLim;
+	Vector4<F> generationType;
+	const auto len = 12;
 
-	const static int len  = 10;
+	UniSimFmt() {}
+	UniSimFmt(Vector2<F> _rLim, Vector2<F> _vLim, Vector2<F> _aLim, Vector2<F> _mLim, Vector4<F> _generationType)
+		: rLim(_rLim), vLim(_vLim), aLim(_aLim), mLim(_mLim), generationType(_generationType) {}
 
-	UniParticle(F3<F> _r, F3<F> _velocity, F3<F> _acc, F _mass);
-	static F *toCudaFmt(UniParticle<F> *particles);
-	static UniParticle<F> *toParticleFmt(F *arr);
+	virtual ~UniSimFmt(){}
+
+	F *toCudaFmt() {
+		F *arr = new F[len];
+		rLim.map(arr, 0);
+		vLim.map(arr, 2);
+		aLim.map(arr, 4);
+		mLim.map(arr, 6);
+		generationType.map(arr, 8);
+		return arr;
+	}
+
+	void toCudaFmt(F *arr, int i) {
+		rLim.map(arr, i);
+		vLim.map(arr, i + 2);
+		aLim.map(arr, i + 4);
+		mLim.map(arr, i + 6);
+		generationType.map(arr, i + 8);
+	}
+
+	void toHostFmt(F *arr, int i) {
+		for (int q = 0; q < 2; q++, i++) {
+			rLim[q] = arr[i];
+			vLim[q] = arr[i + 2];
+			aLim[q] = arr[i + 4];
+			mLim[q] = arr[i + 6];
+			generationType[q] = arr[i + 8];
+			generationType[q] = arr[i + 10];
+		}
+	}
 };
 
 template<typename F>
-UniParticle<F>::UniParticle(F3<F> _r, F3<F> _velocity, F3<F> _acc, F _mass) {
-	r		= _r;
-	velocity     	= _velocity;
-	acceleration 	= _acc;
-	mass		= _mass;
-}
+class UniParticle {
+public:
+	Vector3<F>  r;
+	Vector3<F>  velocity;
+	Vector3<F>  acceleration;
+	F	   		mass;
+	const static auto len  = 10;
 
-template<typename F>
-F *UniParticle<F>::toCudaFmt(UniParticle<F> *particles) {
-	F *arr = malloc(sizeof(F) * (sizeof(particles) / sizeof(UniParticle)) * len);
-	for (int i = 0, j = 0; sizeof(particles) / sizeof(UniParticle); i++) {
-		j = r.map<F>(arr, j);
-		j = velocity.map<F>(arr, j);
-		j = acceleration.map<F>(arr, j);
-		arr[j] = mass;
+	UniParticle(Vector3<F> _r, Vector3<F> _v, Vector3<F> _acc, F _mass)
+		: r(_r), velocity(_v), acceleration(_acc), mass(_mass) {}
+
+	virtual ~UniParticle(){}
+
+	F *toCudaFmt() {
+		F *arr = new F[len];
+		r.map(arr, 0);
+		velocity.map(arr, 3);
+		acceleration.map(arr, 6);
+		arr[9] = mass;
+		return arr;
 	}
-	return arr;
-}
 
-template<typename F>
-UniParticle<F> *toParticleFmt(F *arr) {
-	UniParticle<F> *particles = malloc(sizeof(arr));
-	for (int i = 0, q = 0; i < (sizeof(arr) / sizeof(F)) / particles->len; i++) {
-		particles[i].r			= makeF3(arr[q], arr[q + 1], arr[q + 2]); q += 3;
-		particles[i].velocity		= makeF3(arr[q], arr[q + 1], arr[q + 3]); q += 3;
-		particles[i].acceleration	= makeF3(arr[q], arr[q + 1], arr[q + 3]); q += 3;
-		particles[i].mass		= arr[q];
+	void toCudaFmt(F *arr, int i) {
+		r.map(arr, i);
+		velocity.map(arr, i + 3);
+		acceleration.map(arr, i + 6);
+		arr[i + 9] = mass;
 	}
-	return particles;
-}
 
-template<typename F>
-struct UniLimitFmt {
-	F2<F> rLim;
-	F2<F> vLim;
-	F2<F> aLim;
-	F2<F> mLim;
-	F4<F> generationType;
-	F *toCudaFmt();
-
-	const int len = 14;
+	void toHostFmt(F *arr, int i) {
+		mass = arr[i + 9];
+		for (int q = 0; q < 3; q++, i++) {
+			r[q] 			= arr[i];
+			velocity[q]		= arr[i + 3];
+			acceleration[q] = arr[i + 6];
+		}
+	}
 };
-
-template<typename F>
-F *UniLimitFmt<F>::toCudaFmt() {
-		F *fmt = malloc(sizeof(F) * len);
-		F2<F>::interSegment<F>(fmt, {rLim, vLim, aLim, mLim}, 0, 8);
-		fmt[11] = generationType;
-		return fmt;
-	}
 
 template<typename F>
 class UniverseSimulation {
 public:
-	UniverseSimulation(int _nParticles, int _epsilon, F _dt, Platform platform = Platform::GPU);
-	void addGenerationLimits(UniLimitFmt<F> *limits);
+	UniverseSimulation(int _nParticles, int _epsilon, F _dt);
+	void addGenerationLimits(UniSimFmt *limits);
 	void beginUniverseSimulation();
 	void resumeUniverseSimulation(std::string file);
 	void onEpochCompletion(UniParticle<F> *particles);
@@ -94,22 +113,20 @@ public:
 private:
 	int		n;
 	int		epsilon;
-	int		epochs		= 0;
 	F		dt;
-	UniLimitFmt<F>	limits;
-	bool 		limitsSet	= false;
-	Platform	genPlatform	= Platform::GPU;
-	Platform	computePlatform	= Platform::CPU;
+	auto	epochs 		= 0;
+	bool	limitsSet	= false;
+
+	UniLimitFmt<F> limits;
 	void pregenerateLimits();
 	
 	//Rough estimates for the amount of celestial bodies in the observable universe.
-	const F universeRadius	= 8.8E23; //aka. 28.5 gpc
-	const F stars		= 10E21;
-	const F planets		= 1E24;
-	const F galaxies	= 10E9;
-	const F celestrialBodies= stars + planets;
-	const F fastestBodies	= 700; // km/s
-
+	const F universeRadius		= 8.8E23; //aka. 28.5 gpc
+	const F stars				= 10E21;
+	const F planets				= 1E24;
+	const F galaxies			= 10E9;
+	const F celestrialBodies	= stars + planets;
+	const F fastestBodies		= 700; // km/s
 };
 
 template<typename F>
@@ -149,9 +166,8 @@ void UniverseSimulation<F>::pregenerateLimits() {
 template<typename F>
 void UniverseSimulation<F>::beginUniverseSimulation() {
 	if (!limitsSet) pregenerateLimits();
-	if (!gpuSupported()) //implement me!
-	F *particles;
-	F *dParticles;
+	if (!gpuSupported()) return;//implement me!
+	F *particles, *dParticles;
 	densityParticleGeneration<F>(&limits, n, particles, dParticles);
 }
 

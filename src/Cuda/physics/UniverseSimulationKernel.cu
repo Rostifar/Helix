@@ -7,6 +7,7 @@
 #include "cuda_runtime.h"
 #include "UniverseSimulation.h"
 #include <stdio.h>
+#include "GenerationUtils.cu"
 
 namespace Helix {
 __constant__ float G = 6.67300E-11;
@@ -49,13 +50,6 @@ __device__ inline void updateBodyPosition(F *particle, F dt) {
 }
 
 template<typename F>
-__device__ void cacheLocalBodies(F *interactingBodies, int start, int end) {
-	for (; start <= end; start++) {
-		interactingBodies[start] =
-	}
-}
-
-template<typename F>
 __global__ void simulateNaive(F *particles, int offset, F _dt, F _epsilon, int n_particles) {
 	int        particleId = blockDim.x * blockIdx.x + threadIdx.x;
 	int 	   idx 	      = particleId * offset;
@@ -93,26 +87,69 @@ __global__ void simulateNaive(F *particles, int offset, F _dt, F _epsilon, int n
 }
 
 template<typename F>
-void generateDistributedParticles( UniSimFmt<F> *_limits, UniParticle<F> *_particles, F *_dParticles, KernelDimensions *dims, int n, bool cpyLocal = false ) {
-	curandState *states			= malloc( sizeof( curandState ) * n );
-	curandState *dStates;
-	F			*cudaLimits		= _limits->toCudaFmt();
-	F			*dCudaLimits	= cudaAlloCopy<F>( cudaLimits, sizeof ( cudaLimits ) );
-				*_dParticles	= cudaAlloCopy<F>(  )
+__global__ void distributionGeneration(F *particles, F* limits, curandState *states) {
+	int idx = blockDim.x * blockIdx.x + threadIdx.x;
+	curandState state = states[idx];
+	const int genTypeIdx = 8;
+	const int components[4] = {3, 3, 3, 1};
+	const int limitStride = 2;
+	const int limitSize = 12;
+
+	__shared__ F sharedLimits[limitSize];
+
+	if (threadIdx.x < limitSize) sharedLimits[threadIdx.x] = limits[threadIdx.x];
+
+	for (int i = 0, q = 0; limitStride < genTypeIdx; i += limitStride, genTypeIdx++, q++) {
+		int genType = (int) sharedLimits[genType];
+		if (genType != NONE) {
+			for (int p = 0; p < components[q]; p++, idx++) {
+				particles[idx] = (getRandomSeed<F>(genType, state) * dl) +  sharedLimits[i + 1];
+			}
+		}
+	}
+
 }
 
 template<typename F>
-void startUniverseKernel(F epsilon, F dt, int n, int p, int epochs, UniLimitFmt<F> limits) {
+void generateDistributedParticles(UniSimFmt<F> *_limits, UniParticle<F> *_particles, F *_dParticles, KernelDimensions *dims, int n, bool cpyLocal = false) {
+	curandState *states = malloc(sizeof(curandState) * n);
+	curandState *dStates;
+	cudaMalloc  (&dStates, sizeof(states));
+	cudaMemcpy  (dStates, states, allocationSize, cudaMemcpyHostToDevice);
+
+	F *cudaLimits = _limits->toCudaFmt();
+	F *dCudaLimits = cudaAlloCopy<F>(cudaLimits, sizeof(cudaLimits));
+	F *particles = new F[n * UniParticle<F>::len];
+	UniParticle<F>::massCudaFmt(particles, _particles, n);
+	_dParticles = cudaAlloCopy<F>(particles, sizeof(particles));
+
+	distributionGeneration<<<dims->blocks, dims->threads>>>(_dParticles, dCudaLimits, dStates);
+
+	if (cpyLocal) {
+		F *arr = malloc(sizeof(F) * n * UniParticle<F>::len);
+		cudaMemcpy(arr, _dParticles, sizeof(_dParticles), cudaMemcpyDeviceToHost);
+		UniParticle<F>::massHostFmt(arr, _particles, n);
+		delete arr;
+		cudaFree(_dParticles); //otherwise can be used again for particle calculations.
+	}
+
+	delete states;
+	delete cudaLimits;
+	delete particles;
+	cudaFree(dCudaLimits);
+	cudaFree(dStates);
+}
+
+template<typename F>
 	dim3 blocks  (n / p, 0, 0);
 	dim3 threads (p, 0, 0);
 	F *particles = malloc(sizeof(F) * n * UniParticle<F>::len);
 	F *dParticles = cudaAlloCopy<F>(particles, sizeof(particles));
-
 	distributionGeneration<F> (particles, dParticles, limits, params->particles, &blocks, &threads);
 
 	for (int i = 0; i < params->epochs; i++) {
 		simulateNaive<F, F3, F4><<<blocks, threads, sizeof(F4) * spec->partitions>>>(dBodies, dDynamics, dAccelerations, dt, epsilon, spec->particles);
-		cudaMemcpy(bodies, dBodies, allocationSize,cudaMemcpyDeviceToHost); //implement callback to class
+		cudaMemcpy(bodies, dBodies, allocationSize, cudaMemcpyDeviceToHost); //implement callback to class
 		cudaMemcpy(dynamics, dDynamics, allocationSize, cudaMemcpyDeviceToHost);
 		cudaMemcpy(accelerations, dAccelerations, allocationSize, cudaMemcpyDeviceToHost); //yo lance sucks
 	}

@@ -3,7 +3,6 @@
 #include <string>
 #include "Cuda/physics/UniverseSimulation.h"
 #include <cuda.h>
-#include "vector_types.h"
 #include "Cuda/CudaUtilities.cuh"
 #include "Cuda/hTypes.h"
 

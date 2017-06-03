@@ -4,7 +4,6 @@
 #define GAUSSIAN 4096
 #define UNIFORM  24
 #define NONE	 0
-#define POISSON  96
 
 namespace Helix {
 
@@ -58,12 +57,9 @@ void densityParticleGeneration(UniSimFmt<F> *limits, F *_particles, F *_dParticl
 	cudaMalloc(&dStates, sizeof(states));
 	cudaMemcpy(dStates, states, sizeof(states), cudaMemcpyHostToDevice);
 
-
 	F *limArr	= limits->toCudaFmt();
 	F *dLimits	= cudaAlloCopy<F>(limArr, sizeof(limArr));
 	_dParticles = cudaAlloCopy<F>(_particles, sizeof(_particles));
-
-
 }
 
 template<typename F>

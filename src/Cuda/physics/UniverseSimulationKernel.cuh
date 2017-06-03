@@ -21,7 +21,7 @@
 namespace Helix {
 
 template<typename F>
-void generateDistributedParticles( UniSimFmt<F> *_limits, UniParticle<F> *_particles, F *_dParticles, KernelDimensions *dims, int n, bool cpyLocal = false );
+void generateDistributedParticles(UniSimFmt<F> *_limits, UniParticle<F> *_particles, F *_dParticles, KernelDimensions *dims, int n, bool cpyLocal = false);
 
 template<typename F>
 void startUniverseKernel(F epsilon, F dt, int n, int p, int epochs, UniLimitFmt<F> limits);

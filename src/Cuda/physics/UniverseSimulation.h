@@ -31,7 +31,7 @@ public:
 	Vector2<F>		aLim;
 	Vector2<F>		mLim;
 	Vector4<F>		generationType;
-	bool			limitsSet 		= false;
+	bool			limitsSet		= false;
 	const	auto	rawSize			= sizeof( Vector2<F> ) * 4 + sizeof( Vector4<F> );
 	const	auto 	len 			= 12;
 	const	auto 	commonDiff 		= 2;

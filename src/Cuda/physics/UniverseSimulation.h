@@ -25,23 +25,19 @@ struct UniSimParams {
 template<typename F>
 class UniSimFmt {
 public:
-	Vector2<F>	rLim;
-	Vector2<F>	vLim;
-	Vector2<F>	aLim;
-	Vector2<F>	mLim;
+	Vector2<F>		rLim;
+	Vector2<F>		vLim;
+	Vector2<F>		aLim;
+	Vector2<F>		mLim;
+	Vector4<F>		genType;
+	bool			limitsSet	=	false;
+	const	auto	rawSize		=	sizeof( Vector2<F> ) * 4 + sizeof( Vector24<F> );
+	const	auto 	len			= 	12;
+	const	auto 	commonDiff 	= 	2;
+	const	F 		*header 	=	{ 5, 2, 2, 2, 2, 4 };
 
-
-	Vector4<F> generationType;
-	bool limitsSet = false;
-	const auto rawSize = sizeof(Vector2<F> ) * 4 + sizeof(Vector4<F> );
-	const auto len = 12;
-	const auto commonDiff = 2;
-	const F *header = { 5, 2, 2, 2, 2, 4 };
-
-	UniSimFmt() {
-	}
-	virtual ~UniSimFmt() {
-	}
+					UniSimFmt()		{}
+	virtual 		~UniSimFmt()	{}
 
 	UniSimFmt(Vector2<F> _rLim, Vector2<F> _vLim, Vector2<F> _aLim,
 			Vector2<F> _mLim, Vector4<F> _generationType) {

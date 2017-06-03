@@ -9,7 +9,14 @@
 #ifndef CUDAUTILITIES_CUH_
 #define CUDAUTILITIES_CUH_
 
+#include <cuda.h>
+
 namespace Helix {
+
+typedef struct KernelDimensions {
+	dim3 blocks;
+	dim3 threads;
+};
 
 void *fixedCudaMalloc(size_t len);
 

@@ -1,5 +1,6 @@
 #include "cuda.h"
-#include "../Types.cuh"
+#include "../hTypes.h"
+
 #define GAUSSIAN 4096
 #define UNIFORM  24
 #define NONE	 0
@@ -43,16 +44,25 @@ __global__ void generateRandomParticles(F4<F> *particles, F4<F> *limits, curandS
 }
 
 template<typename F>
-void densityParticleGeneration(UniSimFmt<F> *limits, int n, F *_particles, F *_dParticles) {
+__global__ void generateDensityParticles(F *particles, UniSimFmt<F> *limits, curandState *states) {
+	int 		idx		= blockDim.x * blockIdx.x + threadIdx.x;
+	curandState state	= states[idx];
+
+
+}
+
+template<typename F>
+void densityParticleGeneration(UniSimFmt<F> *limits, F *_particles, F *_dParticles, const int n, bool localCpy = false) {
 	curandState *states = malloc(sizeof(curandState) * n);
 	curandState *dStates;
 	cudaMalloc(&dStates, sizeof(states));
 	cudaMemcpy(dStates, states, sizeof(states), cudaMemcpyHostToDevice);
 
 
-	F *limArr = limits->toCudaFmt();
+	F *limArr	= limits->toCudaFmt();
+	F *dLimits	= cudaAlloCopy<F>(limArr, sizeof(limArr));
+	_dParticles = cudaAlloCopy<F>(_particles, sizeof(_particles));
 
-	F *dLimits = cudaAlloCopy()
 
 }
 

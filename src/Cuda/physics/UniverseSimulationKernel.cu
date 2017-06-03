@@ -7,8 +7,6 @@
 #include "cuda_runtime.h"
 #include "UniverseSimulation.h"
 #include <stdio.h>
-#include "../Types.cuh"
-#include "ParticleGenerator.cuh"
 
 namespace Helix {
 __constant__ float G = 6.67300E-11;
@@ -92,6 +90,15 @@ __global__ void simulateNaive(F *particles, int offset, F _dt, F _epsilon, int n
 
 	bodies[particleId] = body;
 	dynamics[particleId] = dynamic;
+}
+
+template<typename F>
+void generateDistributedParticles( UniSimFmt<F> *_limits, UniParticle<F> *_particles, F *_dParticles, KernelDimensions *dims, int n, bool cpyLocal = false ) {
+	curandState *states			= malloc( sizeof( curandState ) * n );
+	curandState *dStates;
+	F			*cudaLimits		= _limits->toCudaFmt();
+	F			*dCudaLimits	= cudaAlloCopy<F>( cudaLimits, sizeof ( cudaLimits ) );
+				*_dParticles	= cudaAlloCopy<F>(  )
 }
 
 template<typename F>

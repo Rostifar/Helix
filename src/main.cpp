@@ -5,8 +5,11 @@
 #include <cuda.h>
 #include "vector_types.h"
 #include "Cuda/CudaUtilities.cuh"
+#include "Cuda/hTypes.h"
 
 int main() {
+
+
 	return 0;
 }
 

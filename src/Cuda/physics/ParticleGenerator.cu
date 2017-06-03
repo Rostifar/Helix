@@ -43,7 +43,16 @@ __global__ void generateRandomParticles(F4<F> *particles, F4<F> *limits, curandS
 }
 
 template<typename F>
-void densityParticleGeneration(UniLimitFmt<F> *limits, int n, F *_particles, F *_dParticles) {
+void densityParticleGeneration(UniSimFmt<F> *limits, int n, F *_particles, F *_dParticles) {
+	curandState *states = malloc(sizeof(curandState) * n);
+	curandState *dStates;
+	cudaMalloc(&dStates, sizeof(states));
+	cudaMemcpy(dStates, states, sizeof(states), cudaMemcpyHostToDevice);
+
+
+	F *limArr = limits->toCudaFmt();
+
+	F *dLimits = cudaAlloCopy()
 
 }
 

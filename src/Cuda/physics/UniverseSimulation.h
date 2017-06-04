@@ -163,6 +163,7 @@ public:
 		dims.threads = partitions;
 
 		generateDistributedParticles<F>(&limits, particles, dParticles, &dims, n);
+
 	}
 	void resumeUniverseSimulation(std::string file);
 	void onEpochCompletion(UniParticle<F> *particles);
@@ -252,7 +253,6 @@ void checkSimulationParams() {
 	}
 }
 
-void generateParticles() {}
 };
 
 }

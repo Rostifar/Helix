@@ -12,6 +12,10 @@
 namespace Helix {
 __constant__ float G = 6.67300E-11;
 
+/*
+ * http://www.scholarpedia.org/article/N-body_simulations_(gravitational)
+ */
+
 template<typename F, typename F3, typename F4>
 __device__ F3 calculateBodyAcceleration(F4 bi, F4 bj, F epsilonSquared) {
 	F3 rij = {bi.x - bj.x, bi.y - bj.y, bi.z - bj.z};
@@ -36,32 +40,37 @@ __device__ void calculatePartitionAcceleration(F4 body, F3 *acceleration, F4 *sh
 }
 
 template<typename F>
-__device__ inline void updateBodyVelocity(F *particle, F dt) { //velocity verlet
-	particle[3] += 0.5 * particle[6] * dt;
-	particle[4] += 0.5 * particle[7] * dt;
-	particle[5] += 0.5 * particle[8] * dt;
+__device__ inline void updateBodyVelocity(F *body, const F dt) { //velocity verlet (https://en.wikipedia.org/wiki/Verlet_integration)
+	body[3] += 0.5 * body[6] * dt;
+	body[4] += 0.5 * body[7] * dt;
+	body[5] += 0.5 * body[8] * dt;
 }
 
 template<typename F>
-__device__ inline void updateBodyPosition(F *particle, F dt) {
-	particle[0] += particle[3] * dt;
-	particle[1] += particle[4] * dt;
-	particle[2] += particle[5] * dt;
+__device__ inline void updateBodyPosition(F *body, const F dt) {
+	body[0] += body[3] * dt;
+	body[1] += body[4] * dt;
+	body[2] += body[5] * dt;
 }
 
 template<typename F>
-__global__ void simulateNaive(F *particles, int offset, F _dt, F _epsilon, int n_particles) {
-	int        particleId = blockDim.x * blockIdx.x + threadIdx.x;
-	int 	   idx 	      = particleId * offset;
-	F 		   particle[10];
-	__shared__ F interactingBodies[];
+__global__ void simulateNaive(F *particles, F time, const F epsilon, const F dt, const int offset) {
+	const int globalId = blockDim.x * blockIdx.x + threadIdx.x;
+	const int particleId = globalId * offset;
+	const int localIdx = threadIdx.x * offset;
+	const int positionDim = 3;
+	F body[offset];
+	__shared__ F interactingBodies[]; //only needs bodies and masses
 
-	for (int i = 0; i < offset; i++) particle[i] = particles[idx + i];
-
-	updateBodyVelocity<F>(particle, dt);
+	for (int i = particleId, q = 0, p = localIdx; i < (particleId + offset); i++, q++, p++) {
+		if (q > 3) interactingBodies[p] = particles[i];
+		body[q] = particles[i];
+	}
+	__syncthreads();
+	updateBodyVelocity<F>(body, dt); //half-step
 	updateBodyPosition<F>(particle, dt);
 
-	for (int i = 0, localIdx = threadIdx.x * offset; i < n_particles; i += blockDim.x) {
+	for (int i = 0, localIdx = threadIdx.x * offset; i < n_particles; i += blockDim.x) { //including self reaction
 		cacheLocalBodies(interactingBodies, localIdx, localIdx + offset);
 		__syncthreads();
 		calculatePartitionAcceleration<F, F3, F4>(body, &acceleration, interactingBodies, _epsilon); //pass empty custon struct to array
@@ -107,7 +116,6 @@ __global__ void distributionGeneration(F *particles, F* limits, curandState *sta
 			}
 		}
 	}
-
 }
 
 template<typename F>
@@ -139,7 +147,19 @@ void generateDistributedParticles(UniSimFmt<F> *_limits, UniParticle<F> *_partic
 	cudaFree(dCudaLimits);
 	cudaFree(dStates);
 }
+template void generateDistributedParticles<float>(UniSimFmt<float> *, UniParticle<float> *, float *, KernelDimensions *, int, bool);
+template void generateDistributedParticles<double>(UniSimFmt<double> *, UniParticle<double> *, double *, KernelDimensions *, int, bool);
 
+template<typename F>
+void startUniverseKernel(UniSimParams<F> *params, F *dParticles, KernelDimensions *dims, const int epochs) { //preallocated particles
+	for (int i = 0; i < epochs; i++) {
+		simulateNaive<F>()
+	}
+}
+
+}
+
+/*
 template<typename F>
 	dim3 blocks  (n / p, 0, 0);
 	dim3 threads (p, 0, 0);
@@ -160,3 +180,4 @@ template<typename F>
 template void beginUniSim <float> (UniverseParams<float> *, GenerationLimits<float> *);
 template void beginUniSim <double>(UniverseParams<double> *, GenerationLimits<double> *);
 }
+*/
